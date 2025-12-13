@@ -420,7 +420,7 @@ class Bot
         if (!empty($types)) {
             $query['types'] = is_array($types) ? implode(',', $types) : $types;
         }
-        return self::request('GET', 'subscriptions', [], $query);
+        return self::request('GET', 'updates', [], $query);
     }
 
     /**
