@@ -21,6 +21,10 @@ Bot::setMyCommands([
     ['name' => 'echo', 'description' => 'Echo your message']
 ]);
 
+$bot->on('bot_started', function($text) {
+    return Bot::sendMessage("Welcome my friend, your track parameter: {$text}\nLets start with command /start");
+});
+
 // Handle /start
 $bot->command('start', function() {
     return Bot::sendMessage("Welcome! I'm a simple MAX bot.\nUse /help to see available commands.");
@@ -59,6 +63,8 @@ $bot->on('message_created', function() {
     // Only respond to non-command messages
     if ($text && strpos($text, '/') !== 0) {
         return Bot::sendMessage("I received your message. Use /help to see available commands.");
+    } else {
+        return false;
     }
 });
 
