@@ -22,7 +22,18 @@ Bot::setMyCommands([
 ]);
 
 $bot->on('bot_started', function($text) {
+    // Fired if user navigate bot link with start parameters
     return Bot::sendMessage("Welcome my friend, your track parameter: {$text}\nLets start with command /start");
+});
+
+$bot->on('dialog_removed', function($text) {
+    // Fired if user deleting dialog
+    return false;
+});
+
+$bot->on('bot_stopped', function($text) {
+    // Fired if user stop the bot
+    return false;
 });
 
 // Handle /start
