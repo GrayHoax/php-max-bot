@@ -34,11 +34,11 @@ $defaultKeyboard = [
 $bot->action('remove_message', function() {
     $update = PHPMaxBot::$currentUpdate;
     $callbackId = $update['callback']['callback_id'];
-    $messageId = isset($update['message']['id']) ? $update['message']['id'] : null;
+    $messageId = $update['message']['body']['mid'] ?? null;
 
     if ($messageId) {
         $result = Bot::deleteMessage($messageId);
-        $success = isset($result['success']) ? $result['success'] : false;
+        $success = $result['success'] ?? false;
 
         Bot::answerOnCallback($callbackId, [
             'notification' => $success
@@ -99,6 +99,8 @@ $bot->on('message_created', function() {
         $lat = $location['latitude'];
         $lon = $location['longitude'];
         return Bot::sendMessage("Your location: $lat, $lon");
+    } else {
+        return false;
     }
 });
 
@@ -123,6 +125,8 @@ $bot->on('message_created', function() {
         $name = $contact['full_name'] ?? 'Unknown';
         $phone = $contact['tel'] ?? 'Unknown';
         return Bot::sendMessage("Your name: $name\nYour phone: $phone");
+    } else {
+        return false;
     }
 });
 
