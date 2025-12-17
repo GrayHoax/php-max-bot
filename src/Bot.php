@@ -283,6 +283,10 @@ class Bot
             return self::sendMessageToUser($update['chat']['dialog_with_user']['user_id'], $text, $extra);
         } elseif (isset($update['user_id'])) {
             return self::sendMessageToUser($update['user_id'], $text, $extra);
+        } elseif (isset($extra['user_id'])) {
+            $user_id = $extra['user_id'];
+            unset($extra['user_id']);
+            return self::sendMessageToUser($user_id, $text, $extra);
         }
 
         throw new MaxBotException('Unable to determine recipient for message');
