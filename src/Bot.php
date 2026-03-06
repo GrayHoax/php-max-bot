@@ -236,6 +236,11 @@ class Bot
             unset($extra['disable_link_preview']);
         }
 
+        $format = MaxBot::getFormat();
+        if ($format !== false) {
+            $extra['format'] = $format;
+        }
+
         $body = array_merge(['text' => $text], $extra);
         $response = self::request('POST', 'messages', $body, $query);
         return isset($response['message']) ? $response['message'] : $response;
@@ -255,6 +260,11 @@ class Bot
         if (isset($extra['disable_link_preview'])) {
             $query['disable_link_preview'] = $extra['disable_link_preview'];
             unset($extra['disable_link_preview']);
+        }
+
+        $format = MaxBot::getFormat();
+        if ($format !== false) {
+            $extra['format'] = $format;
         }
 
         $body = array_merge(['text' => $text], $extra);

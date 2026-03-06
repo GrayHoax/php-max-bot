@@ -312,6 +312,21 @@ Bot::answerOnCallback($callbackId, [
 ]);
 ```
 
+### Формат сообщений
+
+```php
+// MarkDown
+$bot->setFormat('markdown');
+$bot->setFormat('md');
+// HTML
+$bot->setFormat('html');
+// Простой текст
+$bot->setFormat();
+$bot->setFormat(false);
+```
+
+[Подробнее про форматирование](https://dev.max.ru/docs-api#Форматирование%20текста)
+
 ## Запуск бота
 
 ### Long Polling (режим CLI)
