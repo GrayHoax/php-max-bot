@@ -3,7 +3,7 @@
  * WebhookException.php
  *
  * @author GrayHoax <grayhoax@grayhoax.ru>
- * @link https://github.com/grayhoax/phpmaxbot
+ * @link https://github.com/grayhoax/php-max-bot
  * @license GPL-3.0
  */
 

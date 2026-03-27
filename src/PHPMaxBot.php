@@ -3,7 +3,7 @@
  * PHPMaxBot.php
  *
  * @author GrayHoax <grayhoax@grayhoax.ru>
- * @link https://github.com/grayhoax/phpmaxbot
+ * @link https://github.com/grayhoax/php-max-bot
  * @license GPL-3.0
  */
 
@@ -71,6 +71,13 @@ class PHPMaxBot
     private $lastUpdateMarker = 0;
 
     /**
+     * Message format
+     *
+     * @var string|bool
+     */
+    protected static $format = false;
+
+    /**
      * PHPMaxBot Constructor
      *
      * @param string $token Bot token
@@ -93,6 +100,37 @@ class PHPMaxBot
         }
 
         self::$token = $token;
+    }
+
+    /**
+     * Set message text format
+     *
+     * @param boolean|string $format
+     * @return void
+     */
+    public function setFormat($format = false): void
+    {
+        switch (strtolower($format)) {
+            case 'markdown':
+            case 'md':
+                self::$format = 'markdown';
+                break;
+            case 'html':
+                self::$format = 'html';
+                break;
+            default:
+                self::$format = false;
+        }
+    }
+
+    /**
+     * Get current message format. False if not set
+     *
+     * @return string|bool
+     */
+    public static function getFormat()
+    {
+        return self::$format;
     }
 
     /**

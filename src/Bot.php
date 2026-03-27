@@ -3,7 +3,7 @@
  * Bot.php
  *
  * @author GrayHoax <grayhoax@grayhoax.ru>
- * @link https://github.com/grayhoax/phpmaxbot
+ * @link https://github.com/grayhoax/php-max-bot
  * @license GPL-3.0
  */
 
@@ -236,6 +236,11 @@ class Bot
             unset($extra['disable_link_preview']);
         }
 
+        $format = MaxBot::getFormat();
+        if ($format !== false) {
+            $extra['format'] = $format;
+        }
+
         $body = array_merge(['text' => $text], $extra);
         $response = self::request('POST', 'messages', $body, $query);
         return isset($response['message']) ? $response['message'] : $response;
@@ -255,6 +260,11 @@ class Bot
         if (isset($extra['disable_link_preview'])) {
             $query['disable_link_preview'] = $extra['disable_link_preview'];
             unset($extra['disable_link_preview']);
+        }
+
+        $format = MaxBot::getFormat();
+        if ($format !== false) {
+            $extra['format'] = $format;
         }
 
         $body = array_merge(['text' => $text], $extra);
@@ -529,6 +539,45 @@ class Bot
         $update = PHPMaxBot::$currentUpdate;
         if (isset($update['callback']['payload'])) {
             return $update['callback']['payload'];
+        }
+        return null;
+    }
+
+    /**
+     * Get user contact data data
+     *
+     * @return string|null
+     */
+    public static function getContact()
+    {
+        $update = MaxBot::$currentUpdate;
+        if (isset($update['message']['body']['attachments'])) {
+            foreach ($update['message']['body']['attachments'] as $attachment) {
+                if ($attachment['type'] == 'contact') {
+                    return [
+                        'vcard' => $attachment['payload']['vcf_info'],
+                        'user_id' => $attachment['payload']['max_info']['user_id'],
+                        'first_name' => $attachment['payload']['max_info']['first_name'],
+                        'last_name' => $attachment['payload']['max_info']['last_name']
+                    ];
+                }
+            }
+        }
+        return null;
+    }
+
+    /**
+     * Get sender data
+     *
+     * @return string|null
+     */
+    public static function getSender()
+    {
+        $update = MaxBot::$currentUpdate;
+        if (isset($update['message']['sender'])) {
+            return $update['message']['sender'];
+        } elseif ($update['user']) {
+            return $update['user'];
         }
         return null;
     }
