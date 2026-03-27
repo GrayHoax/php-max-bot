@@ -183,6 +183,12 @@ Keyboard::requestGeoLocation('Отправить местоположение');
 
 // Создание чата
 Keyboard::chat('Создать чат', 'Название чата');
+
+// Открытие мини-приложения
+Keyboard::open_app('Открыть приложение', 'https://example.com/app');
+
+// Отправка текстового сообщения от имени пользователя
+Keyboard::message('Подтвердить', 'Да, подтверждаю');
 ```
 
 ## API методы
@@ -200,7 +206,12 @@ Bot::sendMessageToChat($chatId, 'Текст сообщения', [
 Bot::sendMessageToUser($userId, 'Текст сообщения');
 
 // Отправить сообщение (автоопределение получателя)
+// В групповом чате отправляет в чат, в личном диалоге — пользователю
 Bot::sendMessage('Текст сообщения');
+
+// Явно указать получателя через $extra
+Bot::sendMessage('Текст', ['chat_id' => $chatId]);
+Bot::sendMessage('Текст', ['user_id' => $userId]);
 
 // Получить сообщение по ID
 Bot::getMessage($messageId);
@@ -237,6 +248,9 @@ Bot::editChatInfo($chatId, [
     'title' => 'Новое название'
 ]);
 
+// Удалить чат
+Bot::deleteChat($chatId);
+
 // Получить участников чата
 Bot::getChatMembers($chatId);
 
@@ -248,6 +262,12 @@ Bot::removeChatMember($chatId, $userId);
 
 // Получить администраторов
 Bot::getChatAdmins($chatId);
+
+// Назначить администратора
+Bot::addChatAdmin($chatId, $userId);
+
+// Снять администратора
+Bot::removeChatAdmin($chatId, $userId);
 
 // Покинуть чат
 Bot::leaveChat($chatId);
@@ -286,6 +306,39 @@ Bot::setMyCommands([
 
 // Удалить команды
 Bot::deleteMyCommands();
+```
+
+### Видео
+
+```php
+// Получить информацию о видео по токену
+Bot::getVideo($videoToken);
+```
+
+### Подписки (Webhook)
+
+```php
+// Получить список активных подписок
+Bot::getSubscriptions();
+
+// Создать webhook-подписку
+Bot::createSubscription('https://example.com/webhook', [
+    'message_created',
+    'message_callback',
+    'bot_started'
+]);
+
+// Удалить подписку
+Bot::deleteSubscription('https://example.com/webhook');
+```
+
+### Загрузка файлов
+
+```php
+// Получить URL для загрузки файла
+// Тип: image, video, audio, file
+$upload = Bot::uploadFile('image');
+// $upload['url'] — адрес для загрузки файла через PUT/POST
 ```
 
 ### Действия
@@ -372,11 +425,13 @@ $callbackData = Bot::getCallbackData(); // Данные callback
 - `message_removed` - Сообщение удалено
 - `message_callback` - Нажата callback-кнопка
 - `bot_started` - Бот запущен пользователем
+- `bot_stopped` - Пользователь остановил бота
 - `bot_added` - Бот добавлен в чат
 - `bot_removed` - Бот удален из чата
 - `user_added` - Пользователь добавлен в чат
 - `user_removed` - Пользователь удален из чата
 - `chat_title_changed` - Название чата изменено
+- `dialog_removed` - Диалог удален пользователем
 
 Указать типы обновлений:
 
@@ -417,7 +472,7 @@ GrayHoax <grayhoax@grayhoax.ru>
 ## Ссылки
 
 - [MAX Messenger](https://max.ru/)
-- [MAX Bot API Documentation](https://platform-api.max.ru/docs/)
+- [MAX Bot API Documentation](https://dev.max.ru/docs-api)
 
 ## Поддержка
 

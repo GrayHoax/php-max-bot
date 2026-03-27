@@ -221,6 +221,17 @@ class Bot
     }
 
     /**
+     * Delete chat
+     *
+     * @param int $chatId
+     * @return array
+     */
+    public static function deleteChat($chatId)
+    {
+        return self::request('DELETE', 'chats/' . $chatId);
+    }
+
+    /**
      * Send message to chat
      *
      * @param int $chatId
@@ -272,21 +283,43 @@ class Bot
     public static function sendMessage($text, $extra = [])
     {
         $update = PHPMaxBot::$currentUpdate;
-        // Информация описала в методе https://dev.max.ru/docs-api/methods/GET/updates
-        if (isset($update['message']['sender']['user_id'])) {
-            return self::sendMessageToUser($update['message']['sender']['user_id'], $text, $extra);
-        } elseif (isset($update['callback']['sender']['user_id'])) {
-            return self::sendMessageToUser($update['callback']['sender']['user_id'], $text, $extra);
-        } elseif (isset($update['user']['user_id'])) {
-            return self::sendMessageToUser($update['user']['user_id'], $text, $extra);
-        } elseif (isset($update['chat']['dialog_with_user']['user_id'])) {
-            return self::sendMessageToUser($update['chat']['dialog_with_user']['user_id'], $text, $extra);
-        } elseif (isset($update['user_id'])) {
-            return self::sendMessageToUser($update['user_id'], $text, $extra);
-        } elseif (isset($extra['user_id'])) {
+
+        // Явно указан получатель через extra
+        if (isset($extra['user_id'])) {
             $user_id = $extra['user_id'];
             unset($extra['user_id']);
             return self::sendMessageToUser($user_id, $text, $extra);
+        }
+        if (isset($extra['chat_id'])) {
+            $chat_id = $extra['chat_id'];
+            unset($extra['chat_id']);
+            return self::sendMessageToChat($chat_id, $text, $extra);
+        }
+
+        // Информация описала в методе https://dev.max.ru/docs-api/methods/GET/updates
+        // Групповой чат — отправляем в чат
+        if (isset($update['message']['recipient']['chat_id'])) {
+            return self::sendMessageToChat($update['message']['recipient']['chat_id'], $text, $extra);
+        }
+        if (isset($update['callback']['message']['recipient']['chat_id'])) {
+            return self::sendMessageToChat($update['callback']['message']['recipient']['chat_id'], $text, $extra);
+        }
+
+        // Личный диалог — отправляем пользователю
+        if (isset($update['message']['sender']['user_id'])) {
+            return self::sendMessageToUser($update['message']['sender']['user_id'], $text, $extra);
+        }
+        if (isset($update['callback']['sender']['user_id'])) {
+            return self::sendMessageToUser($update['callback']['sender']['user_id'], $text, $extra);
+        }
+        if (isset($update['user']['user_id'])) {
+            return self::sendMessageToUser($update['user']['user_id'], $text, $extra);
+        }
+        if (isset($update['chat']['dialog_with_user']['user_id'])) {
+            return self::sendMessageToUser($update['chat']['dialog_with_user']['user_id'], $text, $extra);
+        }
+        if (isset($update['user_id'])) {
+            return self::sendMessageToUser($update['user_id'], $text, $extra);
         }
 
         throw new MaxBotException('Unable to determine recipient for message');
@@ -377,6 +410,30 @@ class Bot
     }
 
     /**
+     * Add chat admin
+     *
+     * @param int $chatId
+     * @param int $userId
+     * @return array
+     */
+    public static function addChatAdmin($chatId, $userId)
+    {
+        return self::request('POST', 'chats/' . $chatId . '/members/admins', ['user_id' => $userId]);
+    }
+
+    /**
+     * Remove chat admin
+     *
+     * @param int $chatId
+     * @param int $userId
+     * @return array
+     */
+    public static function removeChatAdmin($chatId, $userId)
+    {
+        return self::request('DELETE', 'chats/' . $chatId . '/members/admins/' . $userId);
+    }
+
+    /**
      * Add chat members
      *
      * @param int $chatId
@@ -413,7 +470,66 @@ class Bot
      */
     public static function removeChatMember($chatId, $userId)
     {
-        return self::request('DELETE', 'chats/' . $chatId . '/members', ['user_id' => $userId]);
+        return self::request('DELETE', 'chats/' . $chatId . '/members', [], ['user_id' => $userId]);
+    }
+
+    /**
+     * Get video information
+     *
+     * @param string $videoToken
+     * @return array
+     */
+    public static function getVideo($videoToken)
+    {
+        return self::request('GET', 'videos/' . $videoToken);
+    }
+
+    /**
+     * Get subscriptions
+     *
+     * @return array
+     */
+    public static function getSubscriptions()
+    {
+        return self::request('GET', 'subscriptions');
+    }
+
+    /**
+     * Create subscription (webhook)
+     *
+     * @param string $url Webhook URL (HTTPS)
+     * @param array $types Update types to subscribe
+     * @return array
+     */
+    public static function createSubscription($url, $types = [])
+    {
+        $data = ['url' => $url];
+        if (!empty($types)) {
+            $data['update_types'] = $types;
+        }
+        return self::request('POST', 'subscriptions', $data);
+    }
+
+    /**
+     * Delete subscription (webhook)
+     *
+     * @param string $url Webhook URL to remove
+     * @return array
+     */
+    public static function deleteSubscription($url)
+    {
+        return self::request('DELETE', 'subscriptions', [], ['url' => $url]);
+    }
+
+    /**
+     * Upload file and get upload URL
+     *
+     * @param string $type File type (image, video, audio, file)
+     * @return array
+     */
+    public static function uploadFile($type)
+    {
+        return self::request('POST', 'uploads', [], ['type' => $type]);
     }
 
     /**

@@ -1,6 +1,10 @@
+.claude/
+.cursor/
+.gpt/
 /vendor/
 composer.lock
 .env
 .idea/
 .vscode/
 *.log
+/tests/config.php

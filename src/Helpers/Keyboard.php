@@ -201,4 +201,32 @@ class Keyboard
     {
         return self::open_appButton($text, $url, $extra);
     }
+
+    /**
+     * Create message button (sends text message to bot on behalf of user)
+     *
+     * @param string $text Button text
+     * @param string $payload Message text to send
+     * @return array Button structure
+     */
+    public static function messageButton($text, $payload)
+    {
+        return [
+            'type' => 'message',
+            'text' => $text,
+            'payload' => $payload
+        ];
+    }
+
+    /**
+     * Alias for messageButton (for compatibility)
+     *
+     * @param string $text Button text
+     * @param string $payload Message text to send
+     * @return array Button structure
+     */
+    public static function message($text, $payload)
+    {
+        return self::messageButton($text, $payload);
+    }
 }

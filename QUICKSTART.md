@@ -68,8 +68,23 @@ php bot.php
 ### Webhook (продакшен)
 
 1. Разместите `bot.php` на веб-сервере с HTTPS
-2. Настройте webhook в MAX API на URL вашего бота
+2. Зарегистрируйте webhook через API:
+
+```php
+Bot::createSubscription('https://example.com/bot.php', [
+    'message_created',
+    'message_callback',
+    'bot_started'
+]);
+```
+
 3. MAX будет отправлять обновления на ваш URL
+
+Для отмены подписки:
+
+```php
+Bot::deleteSubscription('https://example.com/bot.php');
+```
 
 ## Добавление клавиатуры
 
@@ -186,7 +201,7 @@ try {
 1. Изучите [README.md](README.md) для полной документации
 2. Посмотрите [примеры](examples/) для вдохновения
 3. Прочитайте [CHANGELOG.md](CHANGELOG.md) для истории версий
-4. Ознакомьтесь с [MAX API документацией](https://platform-api.max.ru/docs/)
+4. Ознакомьтесь с [MAX API документацией](https://dev.max.ru/docs-api)
 
 ## Частые вопросы
 
