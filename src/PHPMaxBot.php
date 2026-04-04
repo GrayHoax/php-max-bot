@@ -57,6 +57,18 @@ class PHPMaxBot
     public static $debug = true;
 
     /**
+     * Custom cURL options applied to every request.
+     * Use cURL constants as keys (e.g. CURLOPT_TIMEOUT => 30).
+     * Protected options (URL, RETURNTRANSFER, CUSTOMREQUEST, HTTPHEADER, POSTFIELDS)
+     * cannot be overridden and are always set by the library.
+     * Default SSL options (CURLOPT_SSL_VERIFYHOST, CURLOPT_SSL_VERIFYPEER) CAN be
+     * overridden here.
+     *
+     * @var array
+     */
+    public static $curlOptions = [];
+
+    /**
      * PHPMaxBot version
      *
      * @var string
@@ -73,9 +85,12 @@ class PHPMaxBot
     /**
      * PHPMaxBot Constructor
      *
-     * @param string $token Bot token
+     * @param string $token   Bot token
+     * @param array  $options Optional configuration:
+     *   - 'curlOptions' (array)  Custom cURL options (CURLOPT_* constants as keys)
+     *   - 'debug'       (bool)   Override debug mode
      */
-    public function __construct($token)
+    public function __construct($token, array $options = [])
     {
         // Check PHP version
         if (version_compare(phpversion(), '7.4', '<')) {
@@ -93,6 +108,14 @@ class PHPMaxBot
         }
 
         self::$token = $token;
+
+        if (isset($options['curlOptions']) && is_array($options['curlOptions'])) {
+            self::$curlOptions = $options['curlOptions'];
+        }
+
+        if (isset($options['debug'])) {
+            self::$debug = (bool) $options['debug'];
+        }
     }
 
     /**

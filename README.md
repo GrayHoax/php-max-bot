@@ -461,6 +461,72 @@ php bot.php --quiet  // Выключить debug
 php bot.php -q       // Короткая форма
 ```
 
+## Настройка параметров cURL
+
+Библиотека позволяет задать любые параметры cURL, которые будут применяться к каждому запросу к API.
+
+> **Защищённые параметры** — `CURLOPT_URL`, `CURLOPT_RETURNTRANSFER`, `CURLOPT_CUSTOMREQUEST`, `CURLOPT_HTTPHEADER`, `CURLOPT_POSTFIELDS` — всегда устанавливаются библиотекой и не могут быть переопределены.  
+> **SSL-параметры** (`CURLOPT_SSL_VERIFYHOST`, `CURLOPT_SSL_VERIFYPEER`) по умолчанию отключены, но могут быть переопределены.
+
+### Способ 1: через второй параметр конструктора (рекомендуется)
+
+```php
+$bot = new PHPMaxBot('your-bot-token', [
+    'curlOptions' => [
+        CURLOPT_TIMEOUT        => 30,     // Таймаут запроса (секунды)
+        CURLOPT_CONNECTTIMEOUT => 10,     // Таймаут подключения (секунды)
+        CURLOPT_PROXY          => 'http://proxy.example.com:8080',
+        CURLOPT_SSL_VERIFYPEER => true,   // Включить проверку SSL-сертификата
+        CURLOPT_SSL_VERIFYHOST => 2,      // Включить проверку хоста SSL
+    ],
+    'debug' => false,                     // Можно задать и debug здесь
+]);
+```
+
+### Способ 2: через статическое свойство (можно менять в любой момент)
+
+```php
+$bot = new PHPMaxBot('your-bot-token');
+
+PHPMaxBot::$curlOptions = [
+    CURLOPT_TIMEOUT => 30,
+    CURLOPT_PROXY   => 'http://proxy.example.com:8080',
+];
+```
+
+### Примеры конфигураций
+
+**Работа через прокси:**
+```php
+$bot = new PHPMaxBot($token, [
+    'curlOptions' => [
+        CURLOPT_PROXY        => 'http://proxy.example.com:8080',
+        CURLOPT_PROXYUSERPWD => 'user:password',
+    ],
+]);
+```
+
+**Строгая проверка SSL (для продакшн-среды):**
+```php
+$bot = new PHPMaxBot($token, [
+    'curlOptions' => [
+        CURLOPT_SSL_VERIFYPEER => true,
+        CURLOPT_SSL_VERIFYHOST => 2,
+        CURLOPT_CAINFO         => '/etc/ssl/certs/ca-certificates.crt',
+    ],
+]);
+```
+
+**Ограничение таймаутов:**
+```php
+$bot = new PHPMaxBot($token, [
+    'curlOptions' => [
+        CURLOPT_CONNECTTIMEOUT => 5,
+        CURLOPT_TIMEOUT        => 15,
+    ],
+]);
+```
+
 ## Лицензия
 
 GPL-3.0

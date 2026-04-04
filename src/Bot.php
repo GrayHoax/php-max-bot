@@ -51,18 +51,26 @@ class Bot
         }
 
         $ch = curl_init();
-        $options = [
-            CURLOPT_URL => $url,
-            CURLOPT_RETURNTRANSFER => true,
+
+        // Default options (can be overridden via PHPMaxBot::$curlOptions)
+        $defaultOptions = [
             CURLOPT_SSL_VERIFYHOST => false,
             CURLOPT_SSL_VERIFYPEER => false,
-            CURLOPT_CUSTOMREQUEST => $method,
-            //CURLOPT_VERBOSE => true,
-            CURLOPT_HTTPHEADER => [
+        ];
+
+        // Required options always override user-supplied ones
+        $requiredOptions = [
+            CURLOPT_URL            => $url,
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_CUSTOMREQUEST  => $method,
+            CURLOPT_HTTPHEADER     => [
                 'Authorization: ' . PHPMaxBot::$token,
                 'Content-Type: application/json'
             ]
         ];
+
+        // Merge order: defaults → user options → required (protected)
+        $options = array_replace($defaultOptions, PHPMaxBot::$curlOptions, $requiredOptions);
 
         if (!empty($data) && in_array($method, ['POST', 'PUT', 'PATCH'])) {
             $options[CURLOPT_POSTFIELDS] = json_encode($data);
