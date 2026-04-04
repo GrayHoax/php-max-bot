@@ -1,6 +1,6 @@
 # PHPMaxBot
 
-![](assets\repo-preview-image.png)
+![Привлекательное изображение для репозитория](https://github.com/GrayHoax/php-max-bot/raw/assets/repo-preview-image.png)
 
 PHP библиотека для создания ботов в мессенджере MAX. Поддерживает полное API MAX messenger и предоставляет удобный интерфейс для разработки ботов.
 
