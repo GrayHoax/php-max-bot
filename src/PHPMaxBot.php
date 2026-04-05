@@ -86,6 +86,7 @@ class PHPMaxBot
      * Message format
      *
      * @var string|bool
+     * @author Дмитрий А. Морозов <dmitrij.morozov@office.partner-its.ru>
      */
     protected static $format = false;
 
@@ -130,6 +131,7 @@ class PHPMaxBot
      *
      * @param boolean|string $format
      * @return void
+     * @author Дмитрий А. Морозов <dmitrij.morozov@office.partner-its.ru>
      */
     public function setFormat($format = false): void
     {
@@ -150,6 +152,7 @@ class PHPMaxBot
      * Get current message format. False if not set
      *
      * @return string|bool
+     * @author Дмитрий А. Морозов <dmitrij.morozov@office.partner-its.ru>
      */
     public static function getFormat()
     {

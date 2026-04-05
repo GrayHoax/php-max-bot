@@ -804,7 +804,15 @@ class Bot
         }
 
         if ($mimeType === null) {
-            $mimeType = mime_content_type($filePath) ?: 'application/octet-stream';
+            $ext = strtolower(pathinfo($filePath, PATHINFO_EXTENSION));
+            $mimeMap = [
+                'jpg' => 'image/jpeg', 'jpeg' => 'image/jpeg', 'png' => 'image/png',
+                'gif' => 'image/gif',  'webp' => 'image/webp', 'bmp' => 'image/bmp',
+                'mp4' => 'video/mp4',  'avi' => 'video/avi',   'mov' => 'video/quicktime',
+                'mp3' => 'audio/mpeg', 'ogg' => 'audio/ogg',   'wav' => 'audio/wav',
+                'aac' => 'audio/aac',  'pdf' => 'application/pdf',
+            ];
+            $mimeType = $mimeMap[$ext] ?? 'application/octet-stream';
         }
         $data_payload = ['data' => new CURLFile($filePath, $mimeType, basename($filePath)) ];
 
@@ -971,6 +979,7 @@ class Bot
      * Get user contact data data
      *
      * @return string|null
+     * @author Дмитрий А. Морозов <dmitrij.morozov@office.partner-its.ru>
      */
     public static function getContact()
     {
@@ -993,7 +1002,8 @@ class Bot
     /**
      * Get sender data
      *
-     * @return string|null
+     * @return array|null
+     * @author Дмитрий А. Морозов <dmitrij.morozov@office.partner-its.ru>
      */
     public static function getSender()
     {
