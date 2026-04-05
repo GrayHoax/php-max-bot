@@ -1,5 +1,7 @@
 # PHPMaxBot
 
+![Привлекательное изображение для репозитория](https://github.com/GrayHoax/php-max-bot/raw/master/assets/repo-preview-image.png)
+
 PHP библиотека для создания ботов в мессенджере MAX. Поддерживает полное API MAX messenger и предоставляет удобный интерфейс для разработки ботов.
 
 ## Особенности
@@ -183,7 +185,179 @@ Keyboard::requestGeoLocation('Отправить местоположение');
 
 // Создание чата
 Keyboard::chat('Создать чат', 'Название чата');
+
+// Открытие мини-приложения
+Keyboard::open_app('Открыть приложение', 'https://example.com/app');
+
+// Отправка текстового сообщения от имени пользователя
+Keyboard::message('Подтвердить', 'Да, подтверждаю');
 ```
+
+## Отправка медиафайлов
+
+PHPMaxBot предоставляет три уровня API для работы с файлами — от одного вызова до полного ручного контроля.
+
+### Как это работает
+
+Загрузка файла в MAX состоит из двух шагов: сначала запрашивается URL загрузки, затем файл передаётся на этот URL. Способ получения токена вложения зависит от типа файла:
+
+| Тип | Шаг 1 `uploadFile()` | Шаг 2 `uploadFileToUrl()` | Откуда токен |
+|-----|----------------------|--------------------------|--------------|
+| `image`, `file` | возвращает только `url` | передаёт файл → возвращает `token` | из ответа шага 2 |
+| `video`, `audio` | возвращает `url` **и** `token` | передаёт файл (слот завершается) | из ответа шага 1 |
+
+Все высокоуровневые методы скрывают эту разницу — вы просто передаёте файл.
+
+---
+
+### Уровень 1 — высокоуровневые методы (рекомендуется)
+
+Один вызов: библиотека сама получает URL, загружает файл и отправляет сообщение.
+
+#### Отправка в чат
+
+```php
+// Изображение
+Bot::sendImageToChat($chatId, '/path/to/photo.jpg', 'Подпись');
+Bot::sendImageToChat($chatId, '/path/to/photo.jpg', 'Подпись', 'image/jpeg');
+
+// Видео
+Bot::sendVideoToChat($chatId, '/path/to/video.mp4', 'Подпись');
+
+// Аудио
+Bot::sendAudioToChat($chatId, '/path/to/audio.mp3', 'Подпись');
+
+// Документ / произвольный файл
+Bot::sendFileToChat($chatId, '/path/to/document.pdf', 'Подпись');
+
+// Любой тип через универсальный метод
+Bot::sendMediaToChat($chatId, 'image', '/path/to/photo.jpg', 'Подпись');
+```
+
+#### Отправка пользователю
+
+```php
+Bot::sendImageToUser($userId, '/path/to/photo.jpg', 'Подпись');
+Bot::sendVideoToUser($userId, '/path/to/video.mp4', 'Подпись');
+Bot::sendAudioToUser($userId, '/path/to/audio.mp3', 'Подпись');
+Bot::sendFileToUser($userId,  '/path/to/doc.pdf',   'Подпись');
+
+// Универсальный метод
+Bot::sendMediaToUser($userId, 'video', '/path/to/video.mp4', 'Подпись');
+```
+
+#### Сигнатура методов
+
+```php
+// Специализированные (image / video / audio / file)
+Bot::sendImageToChat($chatId, $filePath, $caption = '', $mimeType = null, $extra = []);
+Bot::sendImageToUser($userId, $filePath, $caption = '', $mimeType = null, $extra = []);
+// sendVideo*, sendAudio*, sendFile* — аналогичны
+
+// Универсальные
+Bot::sendMediaToChat($chatId, $type, $filePath, $caption = '', $mimeType = null, $extra = []);
+Bot::sendMediaToUser($userId, $type, $filePath, $caption = '', $mimeType = null, $extra = []);
+```
+
+Параметр `$extra` принимает те же опции, что и `sendMessageToChat()` / `sendMessageToUser()` (`format`, дополнительные `attachments` и т.д.).
+
+---
+
+### Уровень 2 — получение токена, ручная отправка
+
+Используйте этот вариант, когда нужен токен до отправки сообщения — например, чтобы вложить файл в ответ на callback.
+
+```php
+// Получить токен — бибилотека выбирает правильный шаг в зависимости от типа
+$token = Bot::upload('image', '/path/to/photo.jpg');
+$token = Bot::upload('video', '/path/to/video.mp4');
+$token = Bot::upload('audio', '/path/to/audio.mp3');
+$token = Bot::upload('file',  '/path/to/doc.pdf');
+
+// Использовать токен в сообщении
+Bot::sendMessageToChat($chatId, 'Фото', [
+    'attachments' => [
+        ['type' => 'image', 'payload' => ['token' => $token]],
+    ],
+]);
+```
+
+---
+
+### Уровень 3 — полный ручной контроль
+
+Когда нужен доступ к сырым ответам каждого шага.
+
+#### image / file — токен из ответа на загрузку
+
+```php
+// Шаг 1: запросить URL загрузки (токена ещё нет)
+$uploadInfo = Bot::uploadFile('image');
+// $uploadInfo['url'] — адрес для загрузки файла
+
+// Шаг 2: загрузить файл → получить токен
+$uploaded = Bot::uploadFileToUrl($uploadInfo['url'], '/path/to/photo.jpg', 'image/jpeg');
+// $uploaded['token'] — токен вложения
+
+// Шаг 3: отправить сообщение
+Bot::sendMessageToChat($chatId, 'Фото', [
+    'attachments' => [
+        ['type' => 'image', 'payload' => ['token' => $uploaded['token']]],
+    ],
+]);
+```
+
+#### video / audio — токен из первого ответа
+
+```php
+// Шаг 1: запросить URL + получить токен сразу
+$uploadInfo = Bot::uploadFile('video');
+// $uploadInfo['url']   — адрес для загрузки файла
+// $uploadInfo['token'] — токен вложения (уже здесь!)
+
+// Шаг 2: загрузить файл (завершить слот)
+Bot::uploadFileToUrl($uploadInfo['url'], '/path/to/video.mp4', 'video/mp4');
+
+// Шаг 3: отправить сообщение, используя токен из шага 1
+Bot::sendMessageToChat($chatId, 'Видео', [
+    'attachments' => [
+        ['type' => 'video', 'payload' => ['token' => $uploadInfo['token']]],
+    ],
+]);
+```
+
+---
+
+### Полный пример: бот с командами `/photo` и `/video`
+
+```php
+<?php
+require_once __DIR__ . '/vendor/autoload.php';
+
+$bot = new PHPMaxBot('your-bot-token');
+
+$bot->command('photo', function () {
+    return Bot::sendImageToChat(
+        PHPMaxBot::$currentUpdate['message']['recipient']['chat_id'],
+        __DIR__ . '/files/photo.jpg',
+        'Вот ваше фото!'
+    );
+});
+
+$bot->command('video', function () {
+    return Bot::sendVideoToChat(
+        PHPMaxBot::$currentUpdate['message']['recipient']['chat_id'],
+        __DIR__ . '/files/video.mp4',
+        'Вот ваше видео!'
+    );
+});
+
+$bot->start();
+```
+
+Смотрите также пример `examples/media-bot.php`.
+
+---
 
 ## API методы
 
@@ -200,7 +374,12 @@ Bot::sendMessageToChat($chatId, 'Текст сообщения', [
 Bot::sendMessageToUser($userId, 'Текст сообщения');
 
 // Отправить сообщение (автоопределение получателя)
+// В групповом чате отправляет в чат, в личном диалоге — пользователю
 Bot::sendMessage('Текст сообщения');
+
+// Явно указать получателя через $extra
+Bot::sendMessage('Текст', ['chat_id' => $chatId]);
+Bot::sendMessage('Текст', ['user_id' => $userId]);
 
 // Получить сообщение по ID
 Bot::getMessage($messageId);
@@ -237,6 +416,9 @@ Bot::editChatInfo($chatId, [
     'title' => 'Новое название'
 ]);
 
+// Удалить чат
+Bot::deleteChat($chatId);
+
 // Получить участников чата
 Bot::getChatMembers($chatId);
 
@@ -248,6 +430,12 @@ Bot::removeChatMember($chatId, $userId);
 
 // Получить администраторов
 Bot::getChatAdmins($chatId);
+
+// Назначить администратора
+Bot::addChatAdmin($chatId, $userId);
+
+// Снять администратора
+Bot::removeChatAdmin($chatId, $userId);
 
 // Покинуть чат
 Bot::leaveChat($chatId);
@@ -288,11 +476,47 @@ Bot::setMyCommands([
 Bot::deleteMyCommands();
 ```
 
+### Видео
+
+```php
+// Получить информацию о видео по токену
+Bot::getVideo($videoToken);
+```
+
+### Подписки (Webhook)
+
+```php
+// Получить список активных подписок
+Bot::getSubscriptions();
+
+// Создать webhook-подписку
+Bot::createSubscription('https://example.com/webhook', [
+    'message_created',
+    'message_callback',
+    'bot_started'
+]);
+
+// Удалить подписку
+Bot::deleteSubscription('https://example.com/webhook');
+```
+
+### Загрузка и отправка файлов (краткий справочник)
+
+```php
+// Отправить изображение в чат (один вызов)
+Bot::sendImageToChat($chatId, '/path/to/photo.jpg', 'Подпись');
+
+// Отправить видео пользователю
+Bot::sendVideoToUser($userId, '/path/to/video.mp4', 'Подпись');
+```
+
+Полное описание — в разделе [«Отправка медиафайлов»](#отправка-медиафайлов).
+
 ### Действия
 
 ```php
 // Отправить действие (печатает, отправляет файл и т.д.)
-Bot::sendAction($chatId, 'typing');
+Bot::sendAction($chatId, 'typing_on');
 ```
 
 ### Callback ответы
@@ -389,11 +613,13 @@ $callbackData = Bot::getSender(); // Данные отправителя (id, и
 - `message_removed` - Сообщение удалено
 - `message_callback` - Нажата callback-кнопка
 - `bot_started` - Бот запущен пользователем
+- `bot_stopped` - Пользователь остановил бота
 - `bot_added` - Бот добавлен в чат
 - `bot_removed` - Бот удален из чата
 - `user_added` - Пользователь добавлен в чат
 - `user_removed` - Пользователь удален из чата
 - `chat_title_changed` - Название чата изменено
+- `dialog_removed` - Диалог удален пользователем
 
 Указать типы обновлений:
 
@@ -423,6 +649,72 @@ php bot.php --quiet  // Выключить debug
 php bot.php -q       // Короткая форма
 ```
 
+## Настройка параметров cURL
+
+Библиотека позволяет задать любые параметры cURL, которые будут применяться к каждому запросу к API.
+
+> **Защищённые параметры** — `CURLOPT_URL`, `CURLOPT_RETURNTRANSFER`, `CURLOPT_CUSTOMREQUEST`, `CURLOPT_HTTPHEADER`, `CURLOPT_POSTFIELDS` — всегда устанавливаются библиотекой и не могут быть переопределены.  
+> **SSL-параметры** (`CURLOPT_SSL_VERIFYHOST`, `CURLOPT_SSL_VERIFYPEER`) по умолчанию отключены, но могут быть переопределены.
+
+### Способ 1: через второй параметр конструктора (рекомендуется)
+
+```php
+$bot = new PHPMaxBot('your-bot-token', [
+    'curlOptions' => [
+        CURLOPT_TIMEOUT        => 30,     // Таймаут запроса (секунды)
+        CURLOPT_CONNECTTIMEOUT => 10,     // Таймаут подключения (секунды)
+        CURLOPT_PROXY          => 'http://proxy.example.com:8080',
+        CURLOPT_SSL_VERIFYPEER => true,   // Включить проверку SSL-сертификата
+        CURLOPT_SSL_VERIFYHOST => 2,      // Включить проверку хоста SSL
+    ],
+    'debug' => false,                     // Можно задать и debug здесь
+]);
+```
+
+### Способ 2: через статическое свойство (можно менять в любой момент)
+
+```php
+$bot = new PHPMaxBot('your-bot-token');
+
+PHPMaxBot::$curlOptions = [
+    CURLOPT_TIMEOUT => 30,
+    CURLOPT_PROXY   => 'http://proxy.example.com:8080',
+];
+```
+
+### Примеры конфигураций
+
+**Работа через прокси:**
+```php
+$bot = new PHPMaxBot($token, [
+    'curlOptions' => [
+        CURLOPT_PROXY        => 'http://proxy.example.com:8080',
+        CURLOPT_PROXYUSERPWD => 'user:password',
+    ],
+]);
+```
+
+**Строгая проверка SSL (для продакшн-среды):**
+```php
+$bot = new PHPMaxBot($token, [
+    'curlOptions' => [
+        CURLOPT_SSL_VERIFYPEER => true,
+        CURLOPT_SSL_VERIFYHOST => 2,
+        CURLOPT_CAINFO         => '/etc/ssl/certs/ca-certificates.crt',
+    ],
+]);
+```
+
+**Ограничение таймаутов:**
+```php
+$bot = new PHPMaxBot($token, [
+    'curlOptions' => [
+        CURLOPT_CONNECTTIMEOUT => 5,
+        CURLOPT_TIMEOUT        => 15,
+    ],
+]);
+```
+
 ## Лицензия
 
 GPL-3.0
@@ -434,7 +726,7 @@ GrayHoax <grayhoax@grayhoax.ru>
 ## Ссылки
 
 - [MAX Messenger](https://max.ru/)
-- [MAX Bot API Documentation](https://platform-api.max.ru/docs/)
+- [MAX Bot API Documentation](https://dev.max.ru/docs-api)
 
 ## Поддержка
 
