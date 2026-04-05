@@ -193,6 +193,172 @@ Keyboard::open_app('Открыть приложение', 'https://example.com/a
 Keyboard::message('Подтвердить', 'Да, подтверждаю');
 ```
 
+## Отправка медиафайлов
+
+PHPMaxBot предоставляет три уровня API для работы с файлами — от одного вызова до полного ручного контроля.
+
+### Как это работает
+
+Загрузка файла в MAX состоит из двух шагов: сначала запрашивается URL загрузки, затем файл передаётся на этот URL. Способ получения токена вложения зависит от типа файла:
+
+| Тип | Шаг 1 `uploadFile()` | Шаг 2 `uploadFileToUrl()` | Откуда токен |
+|-----|----------------------|--------------------------|--------------|
+| `image`, `file` | возвращает только `url` | передаёт файл → возвращает `token` | из ответа шага 2 |
+| `video`, `audio` | возвращает `url` **и** `token` | передаёт файл (слот завершается) | из ответа шага 1 |
+
+Все высокоуровневые методы скрывают эту разницу — вы просто передаёте файл.
+
+---
+
+### Уровень 1 — высокоуровневые методы (рекомендуется)
+
+Один вызов: библиотека сама получает URL, загружает файл и отправляет сообщение.
+
+#### Отправка в чат
+
+```php
+// Изображение
+Bot::sendImageToChat($chatId, '/path/to/photo.jpg', 'Подпись');
+Bot::sendImageToChat($chatId, '/path/to/photo.jpg', 'Подпись', 'image/jpeg');
+
+// Видео
+Bot::sendVideoToChat($chatId, '/path/to/video.mp4', 'Подпись');
+
+// Аудио
+Bot::sendAudioToChat($chatId, '/path/to/audio.mp3', 'Подпись');
+
+// Документ / произвольный файл
+Bot::sendFileToChat($chatId, '/path/to/document.pdf', 'Подпись');
+
+// Любой тип через универсальный метод
+Bot::sendMediaToChat($chatId, 'image', '/path/to/photo.jpg', 'Подпись');
+```
+
+#### Отправка пользователю
+
+```php
+Bot::sendImageToUser($userId, '/path/to/photo.jpg', 'Подпись');
+Bot::sendVideoToUser($userId, '/path/to/video.mp4', 'Подпись');
+Bot::sendAudioToUser($userId, '/path/to/audio.mp3', 'Подпись');
+Bot::sendFileToUser($userId,  '/path/to/doc.pdf',   'Подпись');
+
+// Универсальный метод
+Bot::sendMediaToUser($userId, 'video', '/path/to/video.mp4', 'Подпись');
+```
+
+#### Сигнатура методов
+
+```php
+// Специализированные (image / video / audio / file)
+Bot::sendImageToChat($chatId, $filePath, $caption = '', $mimeType = null, $extra = []);
+Bot::sendImageToUser($userId, $filePath, $caption = '', $mimeType = null, $extra = []);
+// sendVideo*, sendAudio*, sendFile* — аналогичны
+
+// Универсальные
+Bot::sendMediaToChat($chatId, $type, $filePath, $caption = '', $mimeType = null, $extra = []);
+Bot::sendMediaToUser($userId, $type, $filePath, $caption = '', $mimeType = null, $extra = []);
+```
+
+Параметр `$extra` принимает те же опции, что и `sendMessageToChat()` / `sendMessageToUser()` (`format`, дополнительные `attachments` и т.д.).
+
+---
+
+### Уровень 2 — получение токена, ручная отправка
+
+Используйте этот вариант, когда нужен токен до отправки сообщения — например, чтобы вложить файл в ответ на callback.
+
+```php
+// Получить токен — бибилотека выбирает правильный шаг в зависимости от типа
+$token = Bot::upload('image', '/path/to/photo.jpg');
+$token = Bot::upload('video', '/path/to/video.mp4');
+$token = Bot::upload('audio', '/path/to/audio.mp3');
+$token = Bot::upload('file',  '/path/to/doc.pdf');
+
+// Использовать токен в сообщении
+Bot::sendMessageToChat($chatId, 'Фото', [
+    'attachments' => [
+        ['type' => 'image', 'payload' => ['token' => $token]],
+    ],
+]);
+```
+
+---
+
+### Уровень 3 — полный ручной контроль
+
+Когда нужен доступ к сырым ответам каждого шага.
+
+#### image / file — токен из ответа на загрузку
+
+```php
+// Шаг 1: запросить URL загрузки (токена ещё нет)
+$uploadInfo = Bot::uploadFile('image');
+// $uploadInfo['url'] — адрес для загрузки файла
+
+// Шаг 2: загрузить файл → получить токен
+$uploaded = Bot::uploadFileToUrl($uploadInfo['url'], '/path/to/photo.jpg', 'image/jpeg');
+// $uploaded['token'] — токен вложения
+
+// Шаг 3: отправить сообщение
+Bot::sendMessageToChat($chatId, 'Фото', [
+    'attachments' => [
+        ['type' => 'image', 'payload' => ['token' => $uploaded['token']]],
+    ],
+]);
+```
+
+#### video / audio — токен из первого ответа
+
+```php
+// Шаг 1: запросить URL + получить токен сразу
+$uploadInfo = Bot::uploadFile('video');
+// $uploadInfo['url']   — адрес для загрузки файла
+// $uploadInfo['token'] — токен вложения (уже здесь!)
+
+// Шаг 2: загрузить файл (завершить слот)
+Bot::uploadFileToUrl($uploadInfo['url'], '/path/to/video.mp4', 'video/mp4');
+
+// Шаг 3: отправить сообщение, используя токен из шага 1
+Bot::sendMessageToChat($chatId, 'Видео', [
+    'attachments' => [
+        ['type' => 'video', 'payload' => ['token' => $uploadInfo['token']]],
+    ],
+]);
+```
+
+---
+
+### Полный пример: бот с командами `/photo` и `/video`
+
+```php
+<?php
+require_once __DIR__ . '/vendor/autoload.php';
+
+$bot = new PHPMaxBot('your-bot-token');
+
+$bot->command('photo', function () {
+    return Bot::sendImageToChat(
+        PHPMaxBot::$currentUpdate['message']['recipient']['chat_id'],
+        __DIR__ . '/files/photo.jpg',
+        'Вот ваше фото!'
+    );
+});
+
+$bot->command('video', function () {
+    return Bot::sendVideoToChat(
+        PHPMaxBot::$currentUpdate['message']['recipient']['chat_id'],
+        __DIR__ . '/files/video.mp4',
+        'Вот ваше видео!'
+    );
+});
+
+$bot->start();
+```
+
+Смотрите также пример `examples/media-bot.php`.
+
+---
+
 ## API методы
 
 ### Сообщения
@@ -334,20 +500,23 @@ Bot::createSubscription('https://example.com/webhook', [
 Bot::deleteSubscription('https://example.com/webhook');
 ```
 
-### Загрузка файлов
+### Загрузка и отправка файлов (краткий справочник)
 
 ```php
-// Получить URL для загрузки файла
-// Тип: image, video, audio, file
-$upload = Bot::uploadFile('image');
-// $upload['url'] — адрес для загрузки файла через PUT/POST
+// Отправить изображение в чат (один вызов)
+Bot::sendImageToChat($chatId, '/path/to/photo.jpg', 'Подпись');
+
+// Отправить видео пользователю
+Bot::sendVideoToUser($userId, '/path/to/video.mp4', 'Подпись');
 ```
+
+Полное описание — в разделе [«Отправка медиафайлов»](#отправка-медиафайлов).
 
 ### Действия
 
 ```php
 // Отправить действие (печатает, отправляет файл и т.д.)
-Bot::sendAction($chatId, 'typing');
+Bot::sendAction($chatId, 'typing_on');
 ```
 
 ### Callback ответы

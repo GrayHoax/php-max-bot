@@ -339,6 +339,174 @@ class Bot
         throw new MaxBotException('Unable to determine recipient for message');
     }
 
+    // ── Media send helpers ───────────────────────────────────────────────────
+
+    /**
+     * Upload a media file and send it to a chat in one call.
+     *
+     * Internally calls Bot::upload() then Bot::sendMessageToChat().
+     * The token-source difference between image/file and video/audio is
+     * handled automatically by Bot::upload().
+     *
+     * @param int         $chatId   Target chat ID
+     * @param string      $type     Upload type: 'image', 'video', 'audio', 'file'
+     * @param string      $filePath Local path to the file
+     * @param string      $caption  Optional message caption
+     * @param string|null $mimeType MIME type (auto-detected when null)
+     * @param array       $extra    Additional parameters passed to sendMessageToChat()
+     * @return array Sent message response
+     */
+    public static function sendMediaToChat($chatId, $type, $filePath, $caption = '', $mimeType = null, $extra = [])
+    {
+        $token = self::upload($type, $filePath, $mimeType);
+        $extra['attachments'] = array_merge(
+            [['type' => $type, 'payload' => ['token' => $token]]],
+            $extra['attachments'] ?? []
+        );
+        return self::sendMessageToChat($chatId, $caption, $extra);
+    }
+
+    /**
+     * Upload a media file and send it to a user in one call.
+     *
+     * @param int         $userId   Target user ID
+     * @param string      $type     Upload type: 'image', 'video', 'audio', 'file'
+     * @param string      $filePath Local path to the file
+     * @param string      $caption  Optional message caption
+     * @param string|null $mimeType MIME type (auto-detected when null)
+     * @param array       $extra    Additional parameters passed to sendMessageToUser()
+     * @return array Sent message response
+     */
+    public static function sendMediaToUser($userId, $type, $filePath, $caption = '', $mimeType = null, $extra = [])
+    {
+        $token = self::upload($type, $filePath, $mimeType);
+        $extra['attachments'] = array_merge(
+            [['type' => $type, 'payload' => ['token' => $token]]],
+            $extra['attachments'] ?? []
+        );
+        return self::sendMessageToUser($userId, $caption, $extra);
+    }
+
+    /**
+     * Upload an image and send it to a chat.
+     *
+     * @param int         $chatId   Target chat ID
+     * @param string      $filePath Local path to the image file
+     * @param string      $caption  Optional message caption
+     * @param string|null $mimeType MIME type (auto-detected when null)
+     * @param array       $extra    Additional parameters
+     * @return array Sent message response
+     */
+    public static function sendImageToChat($chatId, $filePath, $caption = '', $mimeType = null, $extra = [])
+    {
+        return self::sendMediaToChat($chatId, 'image', $filePath, $caption, $mimeType, $extra);
+    }
+
+    /**
+     * Upload an image and send it to a user.
+     *
+     * @param int         $userId   Target user ID
+     * @param string      $filePath Local path to the image file
+     * @param string      $caption  Optional message caption
+     * @param string|null $mimeType MIME type (auto-detected when null)
+     * @param array       $extra    Additional parameters
+     * @return array Sent message response
+     */
+    public static function sendImageToUser($userId, $filePath, $caption = '', $mimeType = null, $extra = [])
+    {
+        return self::sendMediaToUser($userId, 'image', $filePath, $caption, $mimeType, $extra);
+    }
+
+    /**
+     * Upload a video and send it to a chat.
+     *
+     * @param int         $chatId   Target chat ID
+     * @param string      $filePath Local path to the video file
+     * @param string      $caption  Optional message caption
+     * @param string|null $mimeType MIME type (auto-detected when null)
+     * @param array       $extra    Additional parameters
+     * @return array Sent message response
+     */
+    public static function sendVideoToChat($chatId, $filePath, $caption = '', $mimeType = null, $extra = [])
+    {
+        return self::sendMediaToChat($chatId, 'video', $filePath, $caption, $mimeType, $extra);
+    }
+
+    /**
+     * Upload a video and send it to a user.
+     *
+     * @param int         $userId   Target user ID
+     * @param string      $filePath Local path to the video file
+     * @param string      $caption  Optional message caption
+     * @param string|null $mimeType MIME type (auto-detected when null)
+     * @param array       $extra    Additional parameters
+     * @return array Sent message response
+     */
+    public static function sendVideoToUser($userId, $filePath, $caption = '', $mimeType = null, $extra = [])
+    {
+        return self::sendMediaToUser($userId, 'video', $filePath, $caption, $mimeType, $extra);
+    }
+
+    /**
+     * Upload an audio file and send it to a chat.
+     *
+     * @param int         $chatId   Target chat ID
+     * @param string      $filePath Local path to the audio file
+     * @param string      $caption  Optional message caption
+     * @param string|null $mimeType MIME type (auto-detected when null)
+     * @param array       $extra    Additional parameters
+     * @return array Sent message response
+     */
+    public static function sendAudioToChat($chatId, $filePath, $caption = '', $mimeType = null, $extra = [])
+    {
+        return self::sendMediaToChat($chatId, 'audio', $filePath, $caption, $mimeType, $extra);
+    }
+
+    /**
+     * Upload an audio file and send it to a user.
+     *
+     * @param int         $userId   Target user ID
+     * @param string      $filePath Local path to the audio file
+     * @param string      $caption  Optional message caption
+     * @param string|null $mimeType MIME type (auto-detected when null)
+     * @param array       $extra    Additional parameters
+     * @return array Sent message response
+     */
+    public static function sendAudioToUser($userId, $filePath, $caption = '', $mimeType = null, $extra = [])
+    {
+        return self::sendMediaToUser($userId, 'audio', $filePath, $caption, $mimeType, $extra);
+    }
+
+    /**
+     * Upload a document/file and send it to a chat.
+     *
+     * @param int         $chatId   Target chat ID
+     * @param string      $filePath Local path to the file
+     * @param string      $caption  Optional message caption
+     * @param string|null $mimeType MIME type (auto-detected when null)
+     * @param array       $extra    Additional parameters
+     * @return array Sent message response
+     */
+    public static function sendFileToChat($chatId, $filePath, $caption = '', $mimeType = null, $extra = [])
+    {
+        return self::sendMediaToChat($chatId, 'file', $filePath, $caption, $mimeType, $extra);
+    }
+
+    /**
+     * Upload a document/file and send it to a user.
+     *
+     * @param int         $userId   Target user ID
+     * @param string      $filePath Local path to the file
+     * @param string      $caption  Optional message caption
+     * @param string|null $mimeType MIME type (auto-detected when null)
+     * @param array       $extra    Additional parameters
+     * @return array Sent message response
+     */
+    public static function sendFileToUser($userId, $filePath, $caption = '', $mimeType = null, $extra = [])
+    {
+        return self::sendMediaToUser($userId, 'file', $filePath, $caption, $mimeType, $extra);
+    }
+
     /**
      * Get messages
      *
