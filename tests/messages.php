@@ -30,9 +30,9 @@ $userMid = null;
 $chatMid = test('sendMessageToChat — отправка текста в чат', function () {
     $result = Bot::sendMessageToChat(TEST_CHAT_ID, '[тест] sendMessageToChat — ' . date('H:i:s'));
     assert_array($result, 'ответ sendMessageToChat');
-    assert_key($result, 'mid');
-    assert_not_empty($result['mid'], 'mid');
-    return $result['mid'];
+    assert_key($result['message']['body'], 'mid');
+    assert_not_empty($result['message']['body']['mid'], 'mid');
+    return $result['message']['body']['mid'];
 });
 
 if ($chatMid) {
@@ -45,8 +45,8 @@ if (TEST_USER_ID) {
     $userMid = test('sendMessageToUser — отправка текста пользователю', function () {
         $result = Bot::sendMessageToUser(TEST_USER_ID, '[тест] sendMessageToUser — ' . date('H:i:s'));
         assert_array($result, 'ответ sendMessageToUser');
-        assert_key($result, 'mid');
-        return $result['mid'];
+        assert_key($result['message']['body'], 'mid');
+        return $result['message']['body']['mid'];
     });
 } else {
     test('sendMessageToUser — отправка текста пользователю', function () {
@@ -60,8 +60,8 @@ test('sendMessage — с явным chat_id в параметре extra', functi
     $result = Bot::sendMessage('[тест] sendMessage c chat_id — ' . date('H:i:s'), [
         'chat_id' => TEST_CHAT_ID,
     ]);
-    assert_key($result, 'mid');
-    Bot::deleteMessage($result['mid']);
+    assert_key($result['message']['body'], 'mid');
+    Bot::deleteMessage($result['message']['body']['mid']);
 });
 
 // ── sendMessage с явным user_id ─────────────────────────────────────────────
@@ -71,8 +71,8 @@ if (TEST_USER_ID) {
         $result = Bot::sendMessage('[тест] sendMessage c user_id — ' . date('H:i:s'), [
             'user_id' => TEST_USER_ID,
         ]);
-        assert_key($result, 'mid');
-        Bot::deleteMessage($result['mid']);
+        assert_key($result['message']['body'], 'mid');
+        Bot::deleteMessage($result['message']['body']['mid']);
     });
 } else {
     test('sendMessage — с явным user_id в параметре extra', function () {
@@ -88,8 +88,8 @@ test('sendMessageToChat — markdown форматирование', function () 
         '**Жирный** _курсив_ ~~зачёркнутый~~ `код` — [ссылка](https://max.ru/) — тест markdown',
         ['format' => 'markdown']
     );
-    assert_key($result, 'mid');
-    Bot::deleteMessage($result['mid']);
+    assert_key($result['message']['body'], 'mid');
+    Bot::deleteMessage($result['message']['body']['mid']);
 });
 
 // ── Форматирование: html ────────────────────────────────────────────────────
@@ -100,8 +100,8 @@ test('sendMessageToChat — html форматирование', function () {
         '<b>Жирный</b> <i>курсив</i> <del>зачёрк.</del> <code>код</code> — <a href="https://max.ru/">ссылка</a> — тест html',
         ['format' => 'html']
     );
-    assert_key($result, 'mid');
-    Bot::deleteMessage($result['mid']);
+    assert_key($result['message']['body'], 'mid');
+    Bot::deleteMessage($result['message']['body']['mid']);
 });
 
 // ── getMessage ──────────────────────────────────────────────────────────────

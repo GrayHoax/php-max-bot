@@ -25,8 +25,8 @@ $testMid = null;
 
 $testMid = test('Подготовка — отправка тестового сообщения', function () {
     $result = Bot::sendMessageToChat(TEST_CHAT_ID, '[тест] сообщение для закрепления — ' . date('H:i:s'));
-    assert_key($result, 'mid');
-    return $result['mid'];
+    assert_key($result['message']['body'], 'mid');
+    return $result['message']['body']['mid'];
 });
 
 if ($testMid) {

@@ -7,6 +7,9 @@
  * @license GPL-3.0
  */
 
+require_once __DIR__ . '/Exceptions/MaxBotException.php';
+require_once __DIR__ . '/Exceptions/ApiException.php';
+
 use PHPMaxBot\Exceptions\ApiException;
 use PHPMaxBot\Exceptions\MaxBotException;
 
@@ -111,6 +114,11 @@ class Bot
                     'response' => substr($result, 0, 200)
                 ]
             );
+        }
+
+        // Handle platform's "empty response body" signal — treat as successful call with no data
+        if (isset($response['code']) && $response['code'] === 'empty.response.body') {
+            return [];
         }
 
         // Handle HTTP errors
@@ -256,8 +264,7 @@ class Bot
         }
 
         $body = array_merge(['text' => $text], $extra);
-        $response = self::request('POST', 'messages', $body, $query);
-        return isset($response['message']) ? $response['message'] : $response;
+        return self::request('POST', 'messages', $body, $query);
     }
 
     /**
@@ -277,8 +284,7 @@ class Bot
         }
 
         $body = array_merge(['text' => $text], $extra);
-        $response = self::request('POST', 'messages', $body, $query);
-        return isset($response['message']) ? $response['message'] : $response;
+        return self::request('POST', 'messages', $body, $query);
     }
 
     /**
@@ -424,9 +430,13 @@ class Bot
      * @param int $userId
      * @return array
      */
-    public static function addChatAdmin($chatId, $userId)
+    public static function addChatAdmin($chatId, $userId, $permissions = [])
     {
-        return self::request('POST', 'chats/' . $chatId . '/members/admins', ['user_id' => $userId]);
+        return self::request('POST', 'chats/' . $chatId . '/members/admins', [
+            'admins' => [
+                ['user_id' => $userId, 'permissions' => $permissions],
+            ],
+        ]);
     }
 
     /**
@@ -530,14 +540,136 @@ class Bot
     }
 
     /**
-     * Upload file and get upload URL
+     * Request an upload slot for a given file type.
      *
-     * @param string $type File type (image, video, audio, file)
-     * @return array
+     * Behaviour differs by type:
+     *   - image / file  → response contains only 'url'; token is issued after the
+     *                     file is actually uploaded via uploadFileToUrl().
+     *   - video / audio → response contains both 'url' and 'token'; the token is
+     *                     pre-assigned before upload and must be used in the
+     *                     message attachment.
+     *
+     * @param string $type File type: 'image', 'video', 'audio', 'file'
+     * @return array  Keys: 'url' (always), 'token' (video/audio only)
      */
     public static function uploadFile($type)
     {
         return self::request('POST', 'uploads', [], ['type' => $type]);
+    }
+
+    /**
+     * Upload a local file in one step and return the attachment token.
+     *
+     * Token source differs by type:
+     *   - image / file  → token is returned inside the upload-URL response body.
+     *   - video / audio → token is pre-assigned by uploadFile(); the file is still
+     *                     transferred to the upload URL to finalise the slot.
+     *
+     * Usage:
+     *   $token = Bot::upload('image', '/path/to/photo.jpg');
+     *   Bot::sendMessageToChat($chatId, 'Photo', [
+     *       'attachments' => [['type' => 'image', 'payload' => ['token' => $token]]]
+     *   ]);
+     *
+     * @param string      $type     Upload type: 'image', 'video', 'audio', 'file'
+     * @param string      $filePath Local path to the file
+     * @param string|null $mimeType MIME type (auto-detected when null)
+     * @return string Attachment token
+     */
+    public static function upload($type, $filePath, $mimeType = null)
+    {
+        $uploadInfo = self::uploadFile($type);
+
+        if (empty($uploadInfo['url'])) {
+            throw new MaxBotException("Upload URL not found in uploadFile() response for type '$type'");
+        }
+
+        if (in_array($type, ['video', 'audio'], true)) {
+            // Token is pre-assigned; upload the file to finalise the slot.
+            if (empty($uploadInfo['token'])) {
+                throw new MaxBotException("Token not found in uploadFile() response for type '$type'");
+            }
+            self::uploadFileToUrl($uploadInfo['url'], $filePath, $mimeType);
+            return $uploadInfo['token'];
+        }
+
+        // image / file: token is issued after the actual upload.
+        $uploaded = self::uploadFileToUrl($uploadInfo['url'], $filePath, $mimeType);
+
+        if (empty($uploaded['token'])) {
+            throw new MaxBotException(
+                "Token not found in upload response for type '$type'. "
+                . 'Response: ' . json_encode($uploaded, JSON_UNESCAPED_UNICODE)
+            );
+        }
+
+        return $uploaded['token'];
+    }
+
+    /**
+     * Upload file content to the URL obtained from uploadFile().
+     *
+     * For image/file types this method returns the response that contains the
+     * attachment token.  For video/audio the token was already returned by
+     * uploadFile(), so the return value of this method is not needed in normal
+     * usage (use Bot::upload() instead).
+     *
+     * @param string      $uploadUrl Upload URL from uploadFile()
+     * @param string      $filePath  Local path to the file
+     * @param string|null $mimeType  MIME type (auto-detected when null)
+     * @return array Raw upload response; guaranteed to have key 'token' if found
+     */
+    public static function uploadFileToUrl($uploadUrl, $filePath, $mimeType = null)
+    {
+        if (!file_exists($filePath)) {
+            throw new MaxBotException("File not found: $filePath");
+        }
+
+        if ($mimeType === null) {
+            $mimeType = mime_content_type($filePath) ?: 'application/octet-stream';
+        }
+        $data_payload = ['data' => new CURLFile($filePath, $mimeType, basename($filePath)) ];
+
+        $ch = curl_init();
+        $options = array_replace([
+            CURLOPT_SSL_VERIFYHOST => false,
+            CURLOPT_SSL_VERIFYPEER => false,
+        ], PHPMaxBot::$curlOptions, [
+            CURLOPT_URL            => $uploadUrl,
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_CUSTOMREQUEST  => 'POST',
+            CURLOPT_POSTFIELDS     => $data_payload,
+            CURLOPT_HTTPHEADER     => ['Content-Type: multipart/form-data', 'Authorization: ' . PHPMaxBot::$token],
+        ]);
+        curl_setopt_array($ch, $options);
+
+        $result    = curl_exec($ch);
+        $curlError = curl_error($ch);
+        $curlErrno = curl_errno($ch);
+        curl_close($ch);
+
+        if ($curlErrno) {
+            throw new MaxBotException('cURL Error: ' . $curlError, $curlErrno);
+        }
+
+        // For video/audio the upload server returns a non-JSON success marker
+        // (e.g. "<retval>1</retval>"). That is expected: the token for those
+        // types was already provided by uploadFile(), not by this response.
+        // For image/file the server returns JSON containing the token.
+        $response = json_decode($result, true);
+        if ($response === null) {
+            return [];
+        }
+
+        $token = null;
+
+        array_walk_recursive($response, function ($value, $key) use (&$token) {
+            if ($key === 'token' && empty($token)) {
+                $token = (string)$value;
+            }
+        });
+
+        return array_merge($response, ['token' => $token]);
     }
 
     /**
