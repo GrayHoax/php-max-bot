@@ -691,7 +691,20 @@ $bot->start([
 
 ## Примеры
 
-Смотрите файл `sample.php` для полного примера использования.
+| Файл | Что демонстрирует |
+|---|---|
+| `sample.php` | Полный пример с командами, клавиатурами и вложениями |
+| `examples/simple-bot.php` | Команды, события, регулярные выражения |
+| `examples/keyboard-bot.php` | Inline-клавиатуры, callback-кнопки, запрос контакта и геолокации |
+| `examples/attachments-bot.php` | Обработка всех типов входящих вложений через `onAttachment()` |
+| `examples/media-bot.php` | Отправка изображений, видео, аудио и файлов |
+
+Запуск любого примера:
+
+```bash
+export BOT_TOKEN=your_token
+php examples/attachments-bot.php
+```
 
 ## Debug режим
 
