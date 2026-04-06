@@ -34,7 +34,7 @@ php tests/updates.php
 | `php tests/messages.php` | Отправка, редактирование, удаление сообщений |
 | `php tests/chats.php` | Управление чатами |
 | `php tests/members.php` | Участники и администраторы |
-| `php tests/keyboard.php` | Все типы кнопок |
+| `php tests/keyboard.php` | Все типы кнопок + ручной тест onAttachment |
 | `php tests/pins.php` | Закреплённые сообщения |
 | `php tests/subscriptions.php` | Подписки |
 | `php tests/uploads.php` | Загрузка файлов |

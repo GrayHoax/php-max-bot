@@ -120,17 +120,48 @@ $bot->action('btn_1', function() {
 
 ```php
 // Когда пользователь впервые запускает бота
-$bot->on('bot_started', function() {
+$bot->on('bot_started', function($payload) {
     $userName = PHPMaxBot::$currentUpdate['user']['name'];
     Bot::sendMessage("Добро пожаловать, $userName!");
 });
 
-// Когда создается новое сообщение
+// Когда создается новое текстовое сообщение
 $bot->on('message_created', function() {
     $text = Bot::getText();
     if ($text && strpos($text, '/') !== 0) {
         Bot::sendMessage("Получено сообщение: $text");
     }
+});
+```
+
+## Обработка входящих вложений
+
+Когда пользователь нажимает кнопку `requestContact` или `requestGeoLocation`, бот получает сообщение с вложением. Используйте `onAttachment()` — он срабатывает раньше общего `on('message_created')`:
+
+```php
+use PHPMaxBot\Helpers\Keyboard;
+
+// Отправить клавиатуру с запросом контакта и геолокации
+$bot->command('share', function() {
+    $keyboard = Keyboard::inlineKeyboard([
+        [Keyboard::requestContact('Отправить контакт')],
+        [Keyboard::requestGeoLocation('Отправить геолокацию')],
+    ]);
+    Bot::sendMessage('Поделитесь данными:', ['attachments' => [$keyboard]]);
+});
+
+// Обработать полученный контакт (данные в payload)
+$bot->onAttachment('contact', function($attachment) {
+    $name = trim(
+        ($attachment['payload']['max_info']['first_name'] ?? '') . ' ' .
+        ($attachment['payload']['max_info']['last_name']  ?? '')
+    );
+    Bot::sendMessage("Контакт получен: $name");
+});
+
+// Обработать полученную геолокацию (поля прямо в вложении, без payload)
+$bot->onAttachment('location', function($attachment) {
+    Bot::sendMessage("Геолокация: {$attachment['latitude']}, {$attachment['longitude']}");
 });
 ```
 
@@ -158,7 +189,8 @@ $bot = new PHPMaxBot($token);
 Посмотрите готовые примеры в папке `examples/`:
 
 - `simple-bot.php` - Простой бот с командами
-- `keyboard-bot.php` - Бот с клавиатурами и кнопками
+- `keyboard-bot.php` - Бот с клавиатурами, кнопками и обработкой вложений
+- `media-bot.php` - Отправка изображений, видео, аудио и файлов
 
 Запуск примера:
 
@@ -215,7 +247,7 @@ Bot::sendMessageToUser($userId, 'Привет!');
 
 ```php
 $bot->on('message_created', function() {
-    $chatId = PHPMaxBot::$currentUpdate['message']['chat']['id'];
+    $chatId = PHPMaxBot::$currentUpdate['message']['recipient']['chat_id'];
     Bot::sendMessage("ID этого чата: $chatId");
 });
 ```

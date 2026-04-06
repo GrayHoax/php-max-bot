@@ -21,18 +21,23 @@ Bot::setMyCommands([
     ['name' => 'echo', 'description' => 'Echo your message']
 ]);
 
-$bot->on('bot_started', function($text) {
-    // Fired if user navigate bot link with start parameters
-    return Bot::sendMessage("Welcome my friend, your track parameter: {$text}\nLets start with command /start");
+$bot->on('bot_started', function($payload) {
+    $update   = PHPMaxBot::$currentUpdate;
+    $userName = $update['user']['name'] ?? 'User';
+    $text     = "Hello, $userName! Thanks for starting the bot. Use /help to see what I can do.";
+    if (!empty($payload)) {
+        $text .= "\nStart parameter: $payload";
+    }
+    return Bot::sendMessage($text);
 });
 
-$bot->on('dialog_removed', function($text) {
-    // Fired if user deleting dialog
+$bot->on('dialog_removed', function() {
+    // Fired when user deletes the dialog
     return false;
 });
 
-$bot->on('bot_stopped', function($text) {
-    // Fired if user stop the bot
+$bot->on('bot_stopped', function() {
+    // Fired when user stops the bot
     return false;
 });
 
@@ -57,14 +62,6 @@ $bot->command('echo', function($text) {
         return Bot::sendMessage("Usage: /echo <your text>");
     }
     return Bot::sendMessage("You said: $text");
-});
-
-// Handle bot_started event
-$bot->on('bot_started', function() {
-    $update = PHPMaxBot::$currentUpdate;
-    $userName = $update['user']['name'] ?? 'User';
-
-    return Bot::sendMessage("Hello, $userName! Thanks for starting the bot. Use /help to see what I can do.");
 });
 
 // Handle regular messages

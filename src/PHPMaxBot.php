@@ -43,6 +43,13 @@ class PHPMaxBot
     protected $_onAction = [];
 
     /**
+     * Attachment handlers (indexed by attachment type)
+     *
+     * @var array
+     */
+    protected $_onAttachment = [];
+
+    /**
      * Bot token
      *
      * @var string
@@ -198,6 +205,41 @@ class PHPMaxBot
     public function action($action, $handler)
     {
         $this->_onAction[$action] = $handler;
+        return $this;
+    }
+
+    /**
+     * Register attachment handler
+     *
+     * Called when a message_created update contains an attachment of the given type.
+     * The handler receives the full attachment array as its first argument.
+     *
+     * Data location differs by type — some types use a 'payload' sub-key, others have
+     * fields directly on the attachment object:
+     *
+     *   Types with payload sub-object:
+     *     'image'          → $a['payload']['photo_id'], $a['payload']['token'], $a['payload']['url']
+     *     'video'          → $a['payload']['url'], $a['payload']['token']
+     *     'audio'          → $a['payload']['url'], $a['payload']['token']
+     *     'contact'        → $a['payload']['vcf_info'], $a['payload']['max_info']['first_name|last_name|user_id']
+     *     'inline_keyboard'→ $a['payload']['buttons']
+     *     'share'          → $a['payload']['url']
+     *
+     *   Types with mixed payload + direct fields:
+     *     'file'    → $a['payload']['url|token'] + $a['filename'], $a['size']
+     *     'sticker' → $a['payload']['url|code']  + $a['width'],    $a['height']
+     *
+     *   Types with only direct fields (no payload):
+     *     'location' → $a['latitude'], $a['longitude']
+     *
+     * @param string   $type    Attachment type: 'image', 'video', 'audio', 'file',
+     *                          'sticker', 'contact', 'inline_keyboard', 'share', 'location'
+     * @param callable $handler Handler receiving the full attachment array
+     * @return self
+     */
+    public function onAttachment($type, $handler)
+    {
+        $this->_onAttachment[$type] = $handler;
         return $this;
     }
 
@@ -379,6 +421,20 @@ class PHPMaxBot
                             break;
                         }
                     }
+                }
+            }
+        }
+
+        // Handle message_created with attachment handlers
+        if (!$run && $updateType === 'message_created' && !empty($this->_onAttachment)) {
+            $attachments = $update['message']['body']['attachments'] ?? [];
+            foreach ($attachments as $attachment) {
+                $attachType = $attachment['type'] ?? null;
+                if ($attachType && isset($this->_onAttachment[$attachType])) {
+                    $run     = true;
+                    $handler = $this->_onAttachment[$attachType];
+                    $param   = $attachment;
+                    break;
                 }
             }
         }

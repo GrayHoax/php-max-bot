@@ -104,7 +104,7 @@ $bot->action('button_2', function() {
 $bot->action('delete_message', function() {
     $update = PHPMaxBot::$currentUpdate;
     $callbackId = $update['callback']['callback_id'];
-    $messageId = isset($update['message']['id']) ? $update['message']['id'] : null;
+    $messageId = $update['message']['body']['mid'] ?? null;
 
     if ($messageId) {
         try {
@@ -148,28 +148,25 @@ $bot->on('bot_started', function() {
     return Bot::sendMessage($text);
 });
 
-// Handle all message_created events
+// Handle location attachment (user pressed «Отправить геолокацию»)
+$bot->onAttachment('location', function($attachment) {
+    $lat = $attachment['latitude'];
+    $lon = $attachment['longitude'];
+    return Bot::sendMessage("Получена геолокация: $lat, $lon");
+});
+
+// Handle contact attachment (user pressed «Отправить контакт»)
+$bot->onAttachment('contact', function($attachment) {
+    $firstName = $attachment['payload']['max_info']['first_name'] ?? 'Unknown';
+    $lastName  = $attachment['payload']['max_info']['last_name']  ?? '';
+    $name      = trim("$firstName $lastName");
+    return Bot::sendMessage("Получен контакт: $name");
+});
+
+// Handle regular text messages (non-command)
 $bot->on('message_created', function() {
-    $update = PHPMaxBot::$currentUpdate;
-
-    // Check if message has location
-    if (isset($update['message']['location'])) {
-        $location = $update['message']['location'];
-        $lat = $location['latitude'];
-        $lon = $location['longitude'];
-        return Bot::sendMessage("Получена геолокация: $lat, $lon");
-    }
-
-    // Check if message has contact
-    if (isset($update['message']['contact_info'])) {
-        $contact = $update['message']['contact_info'];
-        $name = isset($contact['full_name']) ? $contact['full_name'] : 'Unknown';
-        $phone = isset($contact['tel']) ? $contact['tel'] : 'Unknown';
-        return Bot::sendMessage("Получен контакт:\nИмя: $name\nТелефон: $phone");
-    }
-
-    // For text messages without commands, you can add custom logic here
-    // For now, we'll just ignore them (unless they match a command)
+    // onAttachment handlers above take priority for messages with attachments.
+    // This handler receives only plain text messages that are not commands.
 });
 
 // Start the bot
