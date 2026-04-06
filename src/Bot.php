@@ -263,7 +263,7 @@ class Bot
             unset($extra['disable_link_preview']);
         }
 
-        $format = MaxBot::getFormat();
+        $format = PHPMaxBot::getFormat();
         if ($format !== false) {
             $extra['format'] = $format;
         }
@@ -288,7 +288,7 @@ class Bot
             unset($extra['disable_link_preview']);
         }
 
-        $format = MaxBot::getFormat();
+        $format = PHPMaxBot::getFormat();
         if ($format !== false) {
             $extra['format'] = $format;
         }
@@ -978,12 +978,12 @@ class Bot
     /**
      * Get user contact data data
      *
-     * @return string|null
+     * @return array
      * @author Дмитрий А. Морозов <dmitrij.morozov@office.partner-its.ru>
      */
     public static function getContact()
     {
-        $update = MaxBot::$currentUpdate;
+        $update = PHPMaxBot::$currentUpdate;
         if (isset($update['message']['body']['attachments'])) {
             foreach ($update['message']['body']['attachments'] as $attachment) {
                 if ($attachment['type'] == 'contact') {
@@ -1007,7 +1007,7 @@ class Bot
      */
     public static function getSender()
     {
-        $update = MaxBot::$currentUpdate;
+        $update = PHPMaxBot::$currentUpdate;
         if (isset($update['message']['sender'])) {
             return $update['message']['sender'];
         } elseif ($update['user']) {
