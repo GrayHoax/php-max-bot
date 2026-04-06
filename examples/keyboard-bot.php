@@ -91,17 +91,10 @@ $bot->command('geoLocation', function() use ($defaultKeyboard) {
     ]);
 });
 
-$bot->on('message_created', function() {
-    $update = PHPMaxBot::$currentUpdate;
-
-    if (isset($update['message']['location'])) {
-        $location = $update['message']['location'];
-        $lat = $location['latitude'];
-        $lon = $location['longitude'];
-        return Bot::sendMessage("Your location: $lat, $lon");
-    } else {
-        return false;
-    }
+$bot->onAttachment('location', function($attachment) {
+    $lat = $attachment['latitude'];
+    $lon = $attachment['longitude'];
+    return Bot::sendMessage("Your location: $lat, $lon");
 });
 
 /* Contact keyboard */
@@ -117,17 +110,11 @@ $bot->command('contact', function() use ($defaultKeyboard) {
     ]);
 });
 
-$bot->on('message_created', function() {
-    $update = PHPMaxBot::$currentUpdate;
-
-    if (isset($update['message']['contact_info'])) {
-        $contact = $update['message']['contact_info'];
-        $name = $contact['full_name'] ?? 'Unknown';
-        $phone = $contact['tel'] ?? 'Unknown';
-        return Bot::sendMessage("Your name: $name\nYour phone: $phone");
-    } else {
-        return false;
-    }
+$bot->onAttachment('contact', function($attachment) {
+    $firstName = $attachment['payload']['max_info']['first_name'] ?? 'Unknown';
+    $lastName  = $attachment['payload']['max_info']['last_name']  ?? '';
+    $name      = trim("$firstName $lastName");
+    return Bot::sendMessage("Contact received: $name");
 });
 
 /* CreateChat keyboard */

@@ -181,6 +181,29 @@ if ($mid) {
     $sentMids[] = $mid;
 }
 
+// ── onAttachment — ручной тест ────────────────────────────────────────────────
+
+$mid = test('onAttachment — отправить клавиатуру для ручного тестирования', function () {
+    $keyboard = Keyboard::inlineKeyboard([
+        [Keyboard::requestContact('Отправить контакт')],
+        [Keyboard::requestGeoLocation('Отправить геолокацию')],
+    ]);
+    $instruction = "[тест] onAttachment: нажмите одну из кнопок ниже и убедитесь, "
+        . "что бот (keyboard-bot.php) ответил данными вложения.";
+    $result = Bot::sendMessageToChat(TEST_CHAT_ID, $instruction, [
+        'attachments' => [$keyboard],
+    ]);
+    assert_key($result['message']['body'], 'mid');
+    echo "\n" . C_YELLOW . C_BOLD
+        . "  ! Инструкция: нажмите кнопку «Отправить контакт» или «Отправить геолокацию»\n"
+        . "    в чате выше. При запущенном keyboard-bot.php бот должен ответить данными вложения.\n"
+        . C_RESET;
+    return $result['message']['body']['mid'];
+});
+if ($mid) {
+    $sentMids[] = $mid;
+}
+
 // ── Очистка ───────────────────────────────────────────────────────────────────
 
 if (!empty($sentMids)) {

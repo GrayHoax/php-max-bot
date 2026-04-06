@@ -18,6 +18,7 @@ $files = [
     'pins.php',          // pinMessage, getPinnedMessage, unpinMessage
     'subscriptions.php', // getSubscriptions
     'uploads.php',       // uploadFile
+    'attachments.php',   // интерактивный тест входящих вложений (запускается последним)
 ];
 
 $failed  = 0;
