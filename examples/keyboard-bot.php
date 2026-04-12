@@ -34,7 +34,8 @@ $defaultKeyboard = [
 $bot->action('remove_message', function() {
     $update = PHPMaxBot::$currentUpdate;
     $callbackId = $update['callback']['callback_id'];
-    $messageId = $update['message']['body']['mid'] ?? null;
+    // message_callback: сообщение с кнопкой лежит в $update['callback']['message'], не в $update['message']
+    $messageId = $update['callback']['message']['body']['mid'] ?? null;
 
     if ($messageId) {
         $result = Bot::deleteMessage($messageId);

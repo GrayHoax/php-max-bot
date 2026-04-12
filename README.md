@@ -96,8 +96,9 @@ $bot->command('hello', 'Привет! Как дела?');
 ```php
 // Обработка события bot_started
 $bot->on('bot_started', function() {
-    $update = PHPMaxBot::$currentUpdate;
-    $userName = $update['user']['name'];
+    $update   = PHPMaxBot::$currentUpdate;
+    $userId   = $update['user']['user_id'];
+    $userName = $update['user']['first_name'];
     return Bot::sendMessage("Добро пожаловать, $userName!");
 });
 
@@ -678,6 +679,101 @@ $sender  = Bot::getSender(); // Данные отправителя (id, имя,
 - `user_removed` - Пользователь удален из чата
 - `chat_title_changed` - Название чата изменено
 - `dialog_removed` - Диалог удален пользователем
+
+### Структура обновлений: получение userId и chatId
+
+Разные типы обновлений имеют разную структуру. Пути к идентификаторам:
+
+| Тип обновления | userId | chatId |
+|---|---|---|
+| `message_created` | `$update['message']['sender']['user_id']` | `$update['message']['recipient']['chat_id']` ¹ |
+| `message_edited` | `$update['message']['sender']['user_id']` | `$update['message']['recipient']['chat_id']` ¹ |
+| `message_callback` | `$update['callback']['sender']['user_id']` | `$update['callback']['message']['recipient']['chat_id']` ¹ |
+| `message_removed` | `$update['user_id']` | `$update['chat_id']` |
+| `bot_started` | `$update['user']['user_id']` | `$update['chat_id']` |
+| `bot_stopped` | `$update['user']['user_id']` | `$update['chat_id']` |
+| `bot_added` | `$update['user']['user_id']` | `$update['chat_id']` |
+| `bot_removed` | `$update['user']['user_id']` | `$update['chat_id']` |
+| `user_added` | `$update['user']['user_id']` | `$update['chat_id']` |
+| `user_removed` | `$update['user']['user_id']` | `$update['chat_id']` |
+| `chat_title_changed` | `$update['user']['user_id']` | `$update['chat_id']` |
+| `dialog_removed` | `$update['user']['user_id']` | `$update['chat_id']` |
+
+¹ Поле `chat_id` в объекте `recipient` присутствует только для **групповых чатов**. В личном диалоге оно отсутствует — для ответа используйте `sender.user_id`.
+
+Примеры:
+
+```php
+// message_created — отправитель и чат
+$bot->on('message_created', function() {
+    $update = PHPMaxBot::$currentUpdate;
+    $userId = $update['message']['sender']['user_id'] ?? null;
+    // групповой чат:
+    $chatId = $update['message']['recipient']['chat_id'] ?? null;
+    // тип чата: 'dialog' | 'chat' | 'channel'
+    $chatType = $update['message']['recipient']['chat_type'] ?? null;
+});
+
+// message_callback — кто нажал кнопку и где
+$bot->action('my_button', function() {
+    $update     = PHPMaxBot::$currentUpdate;
+    $userId     = $update['callback']['sender']['user_id'];
+    $callbackId = $update['callback']['callback_id'];
+    // сообщение с кнопкой — в $update['callback']['message'], не в $update['message']
+    $messageId  = $update['callback']['message']['body']['mid'] ?? null;
+    $chatId     = $update['callback']['message']['recipient']['chat_id'] ?? null;
+    return Bot::answerOnCallback($callbackId, ['notification' => 'OK']);
+});
+
+// bot_started — кто запустил бота
+$bot->on('bot_started', function() {
+    $update    = PHPMaxBot::$currentUpdate;
+    $userId    = $update['user']['user_id'];
+    $firstName = $update['user']['first_name'];
+    $chatId    = $update['chat_id'];        // ID личного диалога
+    $payload   = $update['payload'] ?? null; // deeplink-параметр
+});
+
+// user_added — кто добавлен и кем
+$bot->on('user_added', function() {
+    $update    = PHPMaxBot::$currentUpdate;
+    $userId    = $update['user']['user_id'];    // добавленный пользователь
+    $chatId    = $update['chat_id'];
+    $inviterId = $update['inviter_id'] ?? null; // кто добавил
+});
+
+// user_removed — кто удалён и кем
+$bot->on('user_removed', function() {
+    $update  = PHPMaxBot::$currentUpdate;
+    $userId  = $update['user']['user_id'];  // удалённый пользователь
+    $chatId  = $update['chat_id'];
+    $adminId = $update['admin_id'] ?? null; // кто удалил
+});
+
+// chat_title_changed — кто сменил название
+$bot->on('chat_title_changed', function() {
+    $update   = PHPMaxBot::$currentUpdate;
+    $userId   = $update['user']['user_id'];
+    $chatId   = $update['chat_id'];
+    $newTitle = $update['title'];
+});
+
+// message_removed — прямые поля, без вложенного объекта user
+$bot->on('message_removed', function() {
+    $update    = PHPMaxBot::$currentUpdate;
+    $userId    = $update['user_id'];    // не $update['user']['user_id']
+    $chatId    = $update['chat_id'];
+    $messageId = $update['message_id'];
+});
+
+// bot_added — бот добавлен в чат или канал
+$bot->on('bot_added', function() {
+    $update    = PHPMaxBot::$currentUpdate;
+    $userId    = $update['user']['user_id']; // кто добавил
+    $chatId    = $update['chat_id'];
+    $isChannel = $update['is_channel'] ?? false;
+});
+```
 
 Указать типы обновлений:
 

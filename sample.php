@@ -104,7 +104,8 @@ $bot->action('button_2', function() {
 $bot->action('delete_message', function() {
     $update = PHPMaxBot::$currentUpdate;
     $callbackId = $update['callback']['callback_id'];
-    $messageId = $update['message']['body']['mid'] ?? null;
+    // message_callback: сообщение с кнопкой лежит в $update['callback']['message'], не в $update['message']
+    $messageId = $update['callback']['message']['body']['mid'] ?? null;
 
     if ($messageId) {
         try {
@@ -135,10 +136,15 @@ $bot->action('color:(.+)', function($matches) {
 });
 
 // Handle bot_started event (when user starts bot for the first time)
+// bot_started: userId → $update['user']['user_id']
+//              chatId  → $update['chat_id']  (ID личного диалога)
+//              payload → $update['payload']  (deeplink-параметр, если есть)
 $bot->on('bot_started', function() {
-    $update = PHPMaxBot::$currentUpdate;
-    $userName = isset($update['user']['name']) ? $update['user']['name'] : 'пользователь';
-    $payload = isset($update['payload']) ? $update['payload'] : null;
+    $update   = PHPMaxBot::$currentUpdate;
+    $userId   = $update['user']['user_id'];
+    $userName = $update['user']['first_name'] ?? 'пользователь';
+    $chatId   = $update['chat_id'];
+    $payload  = $update['payload'] ?? null;
 
     $text = "Привет, $userName! Спасибо, что запустили бота.";
     if ($payload) {

@@ -21,9 +21,13 @@ Bot::setMyCommands([
     ['name' => 'echo', 'description' => 'Echo your message']
 ]);
 
+// bot_started: userId → $update['user']['user_id']
+//              chatId  → $update['chat_id']  (ID личного диалога)
+//              payload → $update['payload']  (deeplink-параметр, если есть)
 $bot->on('bot_started', function($payload) {
-    $update   = PHPMaxBot::$currentUpdate;
-    $userName = $update['user']['name'] ?? 'User';
+    $update    = PHPMaxBot::$currentUpdate;
+    $userId    = $update['user']['user_id'];
+    $userName  = $update['user']['first_name'] ?? 'User';
     $text     = "Hello, $userName! Thanks for starting the bot. Use /help to see what I can do.";
     if (!empty($payload)) {
         $text .= "\nStart parameter: $payload";
