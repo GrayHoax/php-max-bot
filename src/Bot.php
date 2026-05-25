@@ -681,7 +681,7 @@ class Bot
     }
 
     /**
-     * Get subscriptions
+     * Get the list of active webhook subscriptions.
      *
      * @return array
      */
@@ -691,10 +691,19 @@ class Bot
     }
 
     /**
-     * Create subscription (webhook)
+     * Create or update a webhook subscription.
      *
-     * @param string $url Webhook URL (HTTPS)
-     * @param array $types Update types to subscribe
+     * Calling this method with a URL that is already subscribed replaces its
+     * settings (event list) — use it both to create a new subscription and to
+     * update an existing one.
+     *
+     * Requirements (effective 2026-05-25):
+     *   - URL MUST use HTTPS. HTTP webhooks are no longer accepted.
+     *   - The TLS certificate MUST be issued by a trusted CA. Self-signed
+     *     certificates are no longer accepted.
+     *
+     * @param string $url   Webhook URL — HTTPS with a trusted-CA certificate.
+     * @param array  $types Update types to subscribe to. Empty = all types.
      * @return array
      */
     public static function createSubscription($url, $types = [])
@@ -707,9 +716,9 @@ class Bot
     }
 
     /**
-     * Delete subscription (webhook)
+     * Delete a webhook subscription.
      *
-     * @param string $url Webhook URL to remove
+     * @param string $url Webhook URL to remove.
      * @return array
      */
     public static function deleteSubscription($url)
@@ -859,9 +868,13 @@ class Bot
     }
 
     /**
-     * Get updates (long polling)
+     * Get updates (long polling).
      *
-     * @param array $types Update types
+     * Long polling is rate-limited and events have a limited server-side
+     * lifetime — it is intended for local development only. For staging and
+     * production, use webhook subscriptions via createSubscription().
+     *
+     * @param array $types  Update types
      * @param array $params Additional parameters
      * @return array
      */

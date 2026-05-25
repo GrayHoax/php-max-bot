@@ -15,6 +15,23 @@ PHP библиотека для создания ботов в мессендж�
 - Обработка исключений и ошибок API
 - PSR-4 автозагрузка
 
+## ⚠️ Важно: требования к webhook и режиму работы
+
+> **С 25 мая 2026 года MAX прекращает поддержку приёма вебхуков по HTTP и самоподписных сертификатов.**
+> Все продакшн-боты должны принимать обновления по **HTTPS** с сертификатом от **доверенного центра сертификации** (Let's Encrypt, коммерческие CA и т.д.). Подписки с HTTP-URL или невалидным сертификатом перестанут работать.
+>
+> Чтобы переключиться на новый URL или обновить подписку, используйте текущий метод [`Bot::createSubscription()`](#подписки-webhook) — повторный вызов с тем же URL заменит её настройки.
+
+> **Long Polling не подходит для production.**
+> Получение обновлений через `getUpdates` (long polling) ограничено по скорости запросов и сроку хранения событий на сервере MAX. Используйте его только при локальной разработке и отладке — в продакшене переключайтесь на **Webhook**.
+
+Кратко:
+
+| Окружение | Рекомендуемый режим | Требования |
+|---|---|---|
+| Разработка / отладка | Long Polling (CLI) | — |
+| Staging / Production | Webhook | HTTPS + доверенный сертификат |
+
 ## Требования
 
 - PHP >= 7.4
@@ -544,15 +561,26 @@ Bot::getVideo($videoToken);
 
 ### Подписки (Webhook)
 
+> **С 25.05.2026 URL обязан быть HTTPS с сертификатом от доверенного CA.** Запросы на HTTP-адреса и адреса с самоподписными сертификатами будут отклоняться.
+
 ```php
 // Получить список активных подписок
 Bot::getSubscriptions();
 
-// Создать webhook-подписку
+// Создать webhook-подписку (URL обязан быть HTTPS)
 Bot::createSubscription('https://example.com/webhook', [
     'message_created',
     'message_callback',
     'bot_started'
+]);
+
+// Обновить подписку — повторный вызов createSubscription с тем же URL
+// заменит её настройки (список событий)
+Bot::createSubscription('https://example.com/webhook', [
+    'message_created',
+    'message_callback',
+    'bot_started',
+    'user_added',
 ]);
 
 // Удалить подписку
@@ -612,22 +640,82 @@ $bot->setFormat(false);
 
 ## Запуск бота
 
-### Long Polling (режим CLI)
+`PHPMaxBot::start()` сам определяет режим:
+
+- запуск через CLI (`php bot.php`) → **Long Polling**
+- запуск через веб-сервер (HTTP-запрос приходит на скрипт) → **Webhook**
+
+### Long Polling (только для разработки)
 
 ```bash
 php bot.php
 ```
 
-Бот автоматически определит CLI режим и запустит long polling.
+Бот опрашивает `getUpdates` в цикле. Подходит для локальной отладки.
 
-### Webhook
+> ⚠️ **Long Polling не подходит для production.** Метод `getUpdates` ограничен по скорости и сроку хранения событий — при нагрузке часть обновлений может быть пропущена. На staging и production используйте Webhook.
 
-Разместите файл бота на веб-сервере, доступном по HTTPS. MAX будет отправлять обновления на ваш URL.
+### Webhook (production)
+
+Требования:
+
+1. Публичный URL по **HTTPS** (HTTP больше не поддерживается с 25.05.2026).
+2. Сертификат от **доверенного центра** (Let's Encrypt, ZeroSSL, коммерческие CA). Самоподписные сертификаты больше не поддерживаются.
+3. Скрипт должен отвечать на `POST`-запросы от MAX и возвращать `2xx`.
+
+Минимальный webhook-скрипт (например, `public/webhook.php`):
 
 ```php
-$bot = new PHPMaxBot($token);
+<?php
+require_once __DIR__ . '/../vendor/autoload.php';
+
+$bot = new PHPMaxBot(getenv('BOT_TOKEN'));
+
 // Настройка обработчиков...
+$bot->command('start', fn() => Bot::sendMessage('Привет!'));
+
+// При POST-запросе библиотека сама прочитает тело и обработает обновление
 $bot->start();
+```
+
+Регистрация webhook (выполняется один раз — отдельным скриптом или из админки):
+
+```php
+Bot::createSubscription('https://example.com/webhook.php', [
+    'message_created',
+    'message_callback',
+    'bot_started',
+]);
+```
+
+Готовый пример: [`examples/webhook-bot.php`](examples/webhook-bot.php).
+
+#### Обновление подписки
+
+Чтобы сменить URL или список событий — просто вызовите `createSubscription` повторно с новым URL (старую при необходимости удалите через `deleteSubscription`):
+
+```php
+// Снять старую (опционально — если меняется URL)
+Bot::deleteSubscription('https://old.example.com/webhook.php');
+
+// Зарегистрировать новую
+Bot::createSubscription('https://new.example.com/webhook.php', [
+    'message_created',
+    'message_callback',
+]);
+```
+
+#### Проверка SSL-сертификата при исходящих запросах
+
+По умолчанию библиотека отключает `CURLOPT_SSL_VERIFYPEER` / `CURLOPT_SSL_VERIFYHOST` для исходящих запросов к API MAX (это удобно при разработке). **В production обязательно включите проверку** — см. раздел [«Настройка параметров cURL»](#настройка-параметров-curl):
+
+```php
+$bot = new PHPMaxBot($token, [
+    'curlOptions' => [
+        CURLOPT_SSL_VERIFYPEER => true,
+        CURLOPT_SSL_VERIFYHOST => 2,
+    ],
+]);
 ```
 
 ## Обработка исключений
@@ -794,6 +882,7 @@ $bot->start([
 | `examples/keyboard-bot.php` | Inline-клавиатуры, callback-кнопки, запрос контакта и геолокации |
 | `examples/attachments-bot.php` | Обработка всех типов входящих вложений через `onAttachment()` |
 | `examples/media-bot.php` | Отправка изображений, видео, аудио и файлов |
+| `examples/webhook-bot.php` | Production-режим: HTTPS webhook + регистрация подписки |
 
 Запуск любого примера:
 
