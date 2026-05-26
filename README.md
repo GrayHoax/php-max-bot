@@ -108,6 +108,32 @@ $bot->command('echo', function($text) {
 $bot->command('hello', 'Привет! Как дела?');
 ```
 
+#### Форматы обработчика
+
+В качестве обработчика можно передать любой стандартный PHP callable, а также сокращённую форму `[ClassName::class, 'method']` — она работает и для статических, и для обычных (нестатических) методов. Класс с нестатическим методом будет автоматически инстанцирован один раз и переиспользован при последующих вызовах.
+
+```php
+// Closure
+$bot->command('start', fn() => Bot::sendMessage('Привет!'));
+
+// Строковый ответ (отправляется как есть)
+$bot->command('hello', 'Привет!');
+
+// Статический метод — массив или строка
+$bot->command('help', [\App\BotMax\Commands::class, 'onHelp']);
+$bot->command('help', '\App\BotMax\Commands::onHelp');
+
+// Нестатический метод — класс будет инстанцирован автоматически.
+// Конструктор класса должен быть доступен без обязательных параметров.
+$bot->command('start', [\App\BotMax\Commands::class, 'onStart']);
+
+// Уже созданный объект
+$commands = new \App\BotMax\Commands();
+$bot->command('menu', [$commands, 'onMenu']);
+```
+
+Эти же форматы поддерживаются для `$bot->on()`, `$bot->action()`, `$bot->onAttachment()` и `$bot->regex()`.
+
 ### Обработка событий
 
 ```php

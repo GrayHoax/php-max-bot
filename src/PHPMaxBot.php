@@ -12,6 +12,7 @@
  *
  * Main class for MAX messenger bot framework
  */
+
 class PHPMaxBot
 {
     /**
@@ -88,6 +89,14 @@ class PHPMaxBot
      * @var int
      */
     private $lastUpdateMarker = 0;
+
+    /**
+     * Cache of instances created from [ClassName::class, 'method'] handlers
+     * when the method is non-static. Keyed by fully-qualified class name.
+     *
+     * @var array<string, object>
+     */
+    private $_handlerInstances = [];
 
     /**
      * Message format
@@ -468,16 +477,76 @@ class PHPMaxBot
 
         // Execute handler
         if ($run && $handler) {
-            if (is_callable($handler)) {
-                $result = call_user_func_array($handler, [$param]);
+            $callable = $this->resolveHandler($handler);
+            if ($callable !== null) {
+                $result = call_user_func_array($callable, [$param]);
             } else {
-                // String response
+                // Plain string response
                 $result = Bot::sendMessage($handler);
             }
             return is_array($result) ? json_encode($result, JSON_UNESCAPED_UNICODE) : (string)($result ?? '');
         }
 
         return null;
+    }
+
+    /**
+     * Resolve a registered handler into something callable.
+     *
+     * Accepts every standard PHP callable form and additionally supports the
+     * shorthand [ClassName::class, 'method'] for non-static methods —
+     * the class is instantiated once (cached per bot instance) and the call
+     * is dispatched on the instance. Returns null when the handler is not a
+     * callable (e.g. a plain string used as a canned text response).
+     *
+     * Supported forms:
+     *   - Closure / first-class callable
+     *   - [$instance, 'method']
+     *   - [ClassName::class, 'staticMethod']               (called statically)
+     *   - [ClassName::class, 'instanceMethod']             (auto-instantiated)
+     *   - 'ClassName::staticMethod'                        (PHP string form)
+     *   - 'function_name'
+     *
+     * @param mixed $handler
+     * @return callable|null
+     */
+    private function resolveHandler($handler)
+    {
+        // [ClassName, 'method'] — shorthand form. Resolve non-static methods
+        // by instantiating the class so call_user_func_array can dispatch
+        // on an instance (otherwise PHP 8+ fatals on a non-static call).
+        if (is_array($handler)
+            && count($handler) === 2
+            && array_keys($handler) === [0, 1]
+            && is_string($handler[0])
+            && is_string($handler[1])
+            && class_exists($handler[0])
+            && method_exists($handler[0], $handler[1])
+        ) {
+            $class  = $handler[0];
+            $method = $handler[1];
+
+            try {
+                $ref = new ReflectionMethod($class, $method);
+            } catch (\ReflectionException $e) {
+                return null;
+            }
+
+            if (!$ref->isPublic()) {
+                return null;
+            }
+
+            if ($ref->isStatic()) {
+                return [$class, $method];
+            }
+
+            if (!isset($this->_handlerInstances[$class])) {
+                $this->_handlerInstances[$class] = new $class();
+            }
+            return [$this->_handlerInstances[$class], $method];
+        }
+
+        return is_callable($handler) ? $handler : null;
     }
 }
 
