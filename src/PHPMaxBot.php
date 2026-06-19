@@ -99,6 +99,14 @@ class PHPMaxBot
     private $_handlerInstances = [];
 
     /**
+     * Factories for creating handler instances on demand.
+     * Keyed by fully-qualified class name; each value is a callable returning an object.
+     *
+     * @var array<string, callable>
+     */
+    private $_handlerFactories = [];
+
+    /**
      * Message format
      *
      * @var string|bool
@@ -250,6 +258,84 @@ class PHPMaxBot
     {
         $this->_onAttachment[$type] = $handler;
         return $this;
+    }
+
+    /**
+     * Register a ready-made instance of a class for use in array-style handlers
+     * like [ClassName::class, 'method'].
+     *
+     * Allows pre-instantiating classes that require constructor arguments
+     * (e.g. dependency injection) before registering their methods as handlers.
+     *
+     * Example:
+     *   $bot->setInstance(UserHandler::class, new UserHandler($db));
+     *   $bot->command('profile', [UserHandler::class, 'show']);
+     *
+     * @param string $className Fully-qualified class name
+     * @param object $instance  Ready-to-use instance of that class
+     * @return self
+     * @throws InvalidArgumentException If $instance is not an instance of $className
+     */
+    public function setInstance($className, $instance)
+    {
+        if (!is_object($instance)) {
+            throw new InvalidArgumentException('Instance must be an object.');
+        }
+        if (!($instance instanceof $className)) {
+            throw new InvalidArgumentException(sprintf(
+                'Instance must be of class %s, got %s.',
+                $className,
+                get_class($instance)
+            ));
+        }
+        $this->_handlerInstances[$className] = $instance;
+        return $this;
+    }
+
+    /**
+     * Register a factory callback that lazily creates an instance of a class
+     * on the first time it is needed by a handler.
+     *
+     * The factory receives no arguments and must return an instance of $className.
+     * The created instance is cached for subsequent calls.
+     *
+     * Example:
+     *   $bot->setFactory(UserHandler::class, fn() => new UserHandler($container->get('db')));
+     *
+     * @param string   $className Fully-qualified class name
+     * @param callable $factory   Callable returning an instance of $className
+     * @return self
+     */
+    public function setFactory($className, callable $factory)
+    {
+        $this->_handlerFactories[$className] = $factory;
+        return $this;
+    }
+
+    /**
+     * Get a registered/cached handler instance, or null if none exists yet
+     * and no factory is registered for the given class.
+     *
+     * @param string $className Fully-qualified class name
+     * @return object|null
+     */
+    public function getInstance($className)
+    {
+        if (isset($this->_handlerInstances[$className])) {
+            return $this->_handlerInstances[$className];
+        }
+        if (isset($this->_handlerFactories[$className])) {
+            $instance = call_user_func($this->_handlerFactories[$className]);
+            if (!is_object($instance) || !($instance instanceof $className)) {
+                throw new RuntimeException(sprintf(
+                    'Factory for %s must return an instance of that class.',
+                    $className
+                ));
+            }
+            $this->_handlerInstances[$className] = $instance;
+            return $instance;
+        }
+        return null;
     }
 
     /**
@@ -540,8 +626,14 @@ class PHPMaxBot
                 return [$class, $method];
             }
 
+            // Prefer pre-registered instance or factory; fall back to
+            // parameterless instantiation only if neither is available.
             if (!isset($this->_handlerInstances[$class])) {
-                $this->_handlerInstances[$class] = new $class();
+                if (isset($this->_handlerFactories[$class])) {
+                    $this->getInstance($class);
+                } else {
+                    $this->_handlerInstances[$class] = new $class();
+                }
             }
             return [$this->_handlerInstances[$class], $method];
         }
