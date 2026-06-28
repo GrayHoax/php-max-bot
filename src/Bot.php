@@ -32,7 +32,7 @@ class Bot
      *
      * @var string
      */
-    private static $baseUrl = 'https://platform-api.max.ru';
+    private static $baseUrl = 'https://platform-api2.max.ru';
 
     /**
      * Send HTTP request to MAX API
