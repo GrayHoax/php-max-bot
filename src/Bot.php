@@ -248,6 +248,113 @@ class Bot
     }
 
     /**
+     * Perform a message request, retrying while the API reports that an
+     * attachment is still being processed.
+     *
+     * MAX accepts an upload before it has finished processing the file. A message
+     * sent right after Bot::upload() is therefore rejected with HTTP 400
+     * {"code":"attachment.not.ready"} and never appears in the chat — which looks
+     * exactly like "the bot sent nothing". Retrying a moment later succeeds.
+     *
+     * Tuned via PHPMaxBot::$attachmentRetries and PHPMaxBot::$attachmentRetryDelay.
+     *
+     * @param string $method   HTTP method
+     * @param string $endpoint API endpoint
+     * @param array  $data     Request body
+     * @param array  $query    Query parameters
+     * @return array|bool
+     * @throws ApiException When the API keeps rejecting the attachment
+     */
+    private static function requestWithAttachmentRetry($method, $endpoint, $data = [], $query = [])
+    {
+        $maxAttempts = max(1, (int)PHPMaxBot::$attachmentRetries + 1);
+        $baseDelay   = max(0, (int)PHPMaxBot::$attachmentRetryDelay);
+
+        for ($attempt = 1; ; $attempt++) {
+            try {
+                return self::request($method, $endpoint, $data, $query);
+            } catch (ApiException $e) {
+                if ($e->getApiErrorCode() !== 'attachment.not.ready' || $attempt >= $maxAttempts) {
+                    throw $e;
+                }
+                // Linear backoff: bigger files need more processing time.
+                usleep($baseDelay * 1000 * $attempt);
+            }
+        }
+    }
+
+    /**
+     * Attachment types that may accompany a 'file' attachment in one message.
+     *
+     * MAX rejects any message that carries a 'file' attachment together with
+     * another media attachment, or with a second 'file'. Only an inline
+     * keyboard is allowed alongside.
+     *
+     * @var array
+     */
+    private static $fileCompatibleTypes = ['inline_keyboard'];
+
+    /**
+     * Validate the attachment set against MAX's "one file per message" rule.
+     *
+     * MAX answers a violating message with HTTP 400
+     * {"code":"proto.payload","message":"Must be only one file attachment in message"}.
+     * Catching it here turns a silent delivery failure into a clear exception.
+     *
+     * Allowed:   1 file, or 1 file + inline_keyboard, or any mix of non-file media.
+     * Rejected:  2+ files, or a file next to image/video/audio/location/share/contact.
+     *
+     * @param mixed $attachments Value of the 'attachments' message field
+     * @return void
+     * @throws MaxBotException When the combination would be rejected by the API
+     */
+    private static function assertAttachmentsCompatible($attachments)
+    {
+        if (!is_array($attachments) || empty($attachments)) {
+            return;
+        }
+
+        $fileCount = 0;
+        $conflicting = [];
+
+        foreach ($attachments as $attachment) {
+            $type = is_array($attachment) && isset($attachment['type']) ? $attachment['type'] : null;
+            if ($type === null) {
+                continue;
+            }
+            if ($type === 'file') {
+                $fileCount++;
+            } elseif (!in_array($type, self::$fileCompatibleTypes, true)) {
+                $conflicting[] = $type;
+            }
+        }
+
+        if ($fileCount === 0) {
+            return;
+        }
+
+        if ($fileCount > 1) {
+            throw new MaxBotException(
+                'MAX allows only one attachment of type "file" per message, ' . $fileCount . ' given. '
+                . 'Send each file as a separate message — see Bot::sendAttachmentsToChat().',
+                0,
+                ['file_count' => $fileCount]
+            );
+        }
+
+        if (!empty($conflicting)) {
+            throw new MaxBotException(
+                'A message with a "file" attachment cannot carry other attachments ('
+                . implode(', ', array_unique($conflicting)) . '). '
+                . 'Only "inline_keyboard" is allowed alongside a file; send the rest as a separate '
+                . 'message — see Bot::sendAttachmentsToChat().',
+                0,
+                ['conflicting_types' => array_values(array_unique($conflicting))]
+            );
+        }
+    }
+
+    /**
      * Send message to chat
      *
      * @param int $chatId
@@ -268,8 +375,12 @@ class Bot
             $extra['format'] = $format;
         }
 
+        if (isset($extra['attachments'])) {
+            self::assertAttachmentsCompatible($extra['attachments']);
+        }
+
         $body = array_merge(['text' => $text], $extra);
-        return self::request('POST', 'messages', $body, $query);
+        return self::requestWithAttachmentRetry('POST', 'messages', $body, $query);
     }
 
     /**
@@ -293,8 +404,12 @@ class Bot
             $extra['format'] = $format;
         }
 
+        if (isset($extra['attachments'])) {
+            self::assertAttachmentsCompatible($extra['attachments']);
+        }
+
         $body = array_merge(['text' => $text], $extra);
-        return self::request('POST', 'messages', $body, $query);
+        return self::requestWithAttachmentRetry('POST', 'messages', $body, $query);
     }
 
     /**
@@ -518,6 +633,125 @@ class Bot
     }
 
     /**
+     * Upload several attachments and deliver them as a valid sequence of messages.
+     *
+     * MAX allows only one "file" attachment per message and forbids mixing it with
+     * any other media, so a mixed batch cannot travel in a single message. This
+     * helper splits the batch the way the API expects:
+     *   - every non-file attachment (image/video/audio) goes into ONE message;
+     *   - every file goes into a message of its own, in the given order.
+     *
+     * The caption is placed on the first message; $extra["attachments"] (typically
+     * an inline keyboard) is placed on the last one. The remaining $extra keys are
+     * applied to every message.
+     *
+     * Usage:
+     *   Bot::sendAttachmentsToChat($chatId, [
+     *       ["type" => "image", "path" => "/path/to/photo.jpg"],
+     *       ["type" => "file",  "path" => "/path/to/doc.pdf"],
+     *       ["type" => "file",  "token" => $alreadyUploadedToken],
+     *   ], "Caption");
+     *
+     * @param int    $chatId  Target chat ID
+     * @param array  $items   List of ["type" => ..., "path" => ...] or ["type" => ..., "token" => ...]
+     *                        items; "mime" is optional and only used with "path"
+     * @param string $caption Caption for the first message
+     * @param array  $extra   Additional parameters passed to sendMessageToChat()
+     * @return array List of API responses, one per sent message
+     */
+    public static function sendAttachmentsToChat($chatId, $items, $caption = '', $extra = [])
+    {
+        return self::sendAttachments(['chat_id' => $chatId], $items, $caption, $extra);
+    }
+
+    /**
+     * Upload several attachments and deliver them to a user as a valid sequence
+     * of messages. See sendAttachmentsToChat() for the splitting rules.
+     *
+     * @param int    $userId  Target user ID
+     * @param array  $items   List of attachment descriptors
+     * @param string $caption Caption for the first message
+     * @param array  $extra   Additional parameters passed to sendMessageToUser()
+     * @return array List of API responses, one per sent message
+     */
+    public static function sendAttachmentsToUser($userId, $items, $caption = '', $extra = [])
+    {
+        return self::sendAttachments(['user_id' => $userId], $items, $caption, $extra);
+    }
+
+    /**
+     * Shared implementation for sendAttachmentsToChat() / sendAttachmentsToUser().
+     *
+     * @param array  $recipient Either ["chat_id" => int] or ["user_id" => int]
+     * @param array  $items     List of attachment descriptors
+     * @param string $caption   Caption for the first message
+     * @param array  $extra     Additional message parameters
+     * @return array List of API responses
+     * @throws MaxBotException On a malformed descriptor or an empty batch
+     */
+    private static function sendAttachments($recipient, $items, $caption, $extra)
+    {
+        $group = [];
+        $files = [];
+
+        foreach ((array)$items as $index => $item) {
+            if (!is_array($item) || empty($item['type'])) {
+                throw new MaxBotException("Attachment item #$index must be an array with a 'type' key");
+            }
+
+            if (isset($item['token'])) {
+                $token = $item['token'];
+            } elseif (isset($item['path'])) {
+                $token = self::upload($item['type'], $item['path'], $item['mime'] ?? null);
+            } else {
+                throw new MaxBotException("Attachment item #$index must define either 'path' or 'token'");
+            }
+
+            $attachment = ['type' => $item['type'], 'payload' => ['token' => $token]];
+
+            if ($item['type'] === 'file') {
+                $files[] = $attachment;
+            } else {
+                $group[] = $attachment;
+            }
+        }
+
+        // One message for all non-file media, then one message per file.
+        $queue = [];
+        if (!empty($group)) {
+            $queue[] = $group;
+        }
+        foreach ($files as $file) {
+            $queue[] = [$file];
+        }
+
+        if (empty($queue)) {
+            throw new MaxBotException('No attachments to send');
+        }
+
+        $trailing = $extra['attachments'] ?? [];
+        unset($extra['attachments']);
+
+        $responses = [];
+        $lastIndex = count($queue) - 1;
+
+        foreach ($queue as $index => $attachments) {
+            $messageExtra = $extra;
+            $messageExtra['attachments'] = $index === $lastIndex
+                ? array_merge($attachments, $trailing)
+                : $attachments;
+
+            $text = $index === 0 ? $caption : '';
+
+            $responses[] = isset($recipient['chat_id'])
+                ? self::sendMessageToChat($recipient['chat_id'], $text, $messageExtra)
+                : self::sendMessageToUser($recipient['user_id'], $text, $messageExtra);
+        }
+
+        return $responses;
+    }
+
+    /**
      * Get messages
      *
      * @param int $chatId
@@ -553,7 +787,11 @@ class Bot
      */
     public static function editMessage($messageId, $data = [])
     {
-        return self::request('PUT', 'messages', $data, ['message_id' => $messageId]);
+        if (isset($data['attachments'])) {
+            self::assertAttachmentsCompatible($data['attachments']);
+        }
+
+        return self::requestWithAttachmentRetry('PUT', 'messages', $data, ['message_id' => $messageId]);
     }
 
     /**

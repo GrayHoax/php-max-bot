@@ -273,6 +273,46 @@ Keyboard::message('Подтвердить', 'Да, подтверждаю');
 
 PHPMaxBot предоставляет три уровня API для работы с файлами — от одного вызова до полного ручного контроля.
 
+### ⚠️ Ограничения MAX на состав вложений
+
+Сервер MAX накладывает жёсткое ограничение на вложения типа `file`:
+
+> **В одном сообщении может быть только одно вложение типа `file`, и рядом с ним не может быть никаких других вложений, кроме `inline_keyboard`.**
+
+| Состав сообщения | Результат |
+|------------------|-----------|
+| 1 × `image` | ✅ |
+| несколько `image` / `video` / `audio` в любом сочетании | ✅ |
+| 1 × `file` | ✅ |
+| 1 × `file` + `inline_keyboard` | ✅ |
+| 2 × `file` | ❌ `400 proto.payload` |
+| `file` + `image` (или `video` / `audio` / `location` / `share`) | ❌ `400 proto.payload` |
+
+Ответ сервера при нарушении:
+
+```json
+{"code":"proto.payload","message":"Must be only one file attachment in message"}
+```
+
+Библиотека проверяет состав вложений **до** обращения к API и бросает `MaxBotException` с понятным текстом — так ошибка не превращается в «сообщение просто не пришло». Чтобы отправить смешанный набор, используйте [`Bot::sendAttachmentsToChat()`](#пакетная-отправка-нескольких-вложений), который сам разложит его на допустимые сообщения.
+
+### ⚠️ Файл обрабатывается асинхронно
+
+MAX принимает загрузку файла раньше, чем заканчивает его обработку. Сообщение, отправленное сразу после `Bot::upload('file', ...)`, отклоняется:
+
+```json
+{"code":"attachment.not.ready","message":"Key: errors.process.attachment.file.not.processed"}
+```
+
+Библиотека обрабатывает это сама: при получении `attachment.not.ready` отправка автоматически повторяется с линейно растущей паузой. Поведение настраивается:
+
+```php
+PHPMaxBot::$attachmentRetries    = 5;    // число повторов (0 — отключить)
+PHPMaxBot::$attachmentRetryDelay = 500;  // базовая пауза, мс: 500, 1000, 1500, ...
+```
+
+Если повторы исчерпаны, бросается `ApiException` с кодом `attachment.not.ready`.
+
 ### Как это работает
 
 Загрузка файла в MAX состоит из двух шагов: сначала запрашивается URL загрузки, затем файл передаётся на этот URL. Способ получения токена вложения зависит от типа файла:
@@ -344,18 +384,81 @@ Bot::sendMediaToUser($userId, $type, $filePath, $caption = '', $mimeType = null,
 Используйте этот вариант, когда нужен токен до отправки сообщения — например, чтобы вложить файл в ответ на callback.
 
 ```php
-// Получить токен — бибилотека выбирает правильный шаг в зависимости от типа
-$token = Bot::upload('image', '/path/to/photo.jpg');
-$token = Bot::upload('video', '/path/to/video.mp4');
-$token = Bot::upload('audio', '/path/to/audio.mp3');
-$token = Bot::upload('file',  '/path/to/doc.pdf');
+// Получить токен — библиотека выбирает правильный шаг в зависимости от типа.
+// Каждому вложению нужна своя переменная: тип токена должен совпадать
+// с 'type' в attachments, иначе сообщение будет отклонено.
+$imageToken = Bot::upload('image', '/path/to/photo.jpg');
+$videoToken = Bot::upload('video', '/path/to/video.mp4');
+$audioToken = Bot::upload('audio', '/path/to/audio.mp3');
+$fileToken  = Bot::upload('file',  '/path/to/doc.pdf');
 
 // Использовать токен в сообщении
 Bot::sendMessageToChat($chatId, 'Фото', [
     'attachments' => [
-        ['type' => 'image', 'payload' => ['token' => $token]],
+        ['type' => 'image', 'payload' => ['token' => $imageToken]],
     ],
 ]);
+
+// Файл — ТОЛЬКО отдельным сообщением (см. «Ограничения MAX на состав вложений»)
+Bot::sendMessageToChat($chatId, 'Документ', [
+    'attachments' => [
+        ['type' => 'file', 'payload' => ['token' => $fileToken]],
+    ],
+]);
+```
+
+> ⚠️ Частая ошибка: положить в одно сообщение и картинку, и файл. MAX ответит
+> `400 proto.payload` — библиотека перехватит это раньше и бросит `MaxBotException`.
+
+---
+
+### Пакетная отправка нескольких вложений
+
+Когда нужно отправить сразу несколько вложений, из которых часть — файлы, используйте
+`sendAttachmentsToChat()` / `sendAttachmentsToUser()`. Метод сам разложит набор на
+допустимые сообщения: все не-файловые вложения уходят одним сообщением, каждый файл —
+отдельным.
+
+```php
+$responses = Bot::sendAttachmentsToChat($chatId, [
+    ['type' => 'image', 'path' => '/path/to/photo1.jpg'],
+    ['type' => 'image', 'path' => '/path/to/photo2.jpg'],
+    ['type' => 'file',  'path' => '/path/to/doc.pdf'],
+    ['type' => 'file',  'path' => '/path/to/report.xlsx'],
+], 'Подпись');
+
+// Отправлено 3 сообщения:
+//   1) [image, image] с подписью «Подпись»
+//   2) [file] doc.pdf
+//   3) [file] report.xlsx
+// $responses — массив ответов API, по одному на сообщение
+```
+
+Элемент набора описывается ключами:
+
+| Ключ | Обязателен | Описание |
+|------|------------|----------|
+| `type` | да | `image`, `video`, `audio`, `file` |
+| `path` | да¹ | путь к локальному файлу — будет загружен автоматически |
+| `token` | да¹ | готовый токен, если файл уже загружен через `Bot::upload()` |
+| `mime` | нет | MIME-тип; по умолчанию определяется по расширению |
+
+¹ нужно указать либо `path`, либо `token`.
+
+Подпись (`$caption`) ставится на первое сообщение, а `$extra['attachments']`
+(обычно клавиатура) — на последнее:
+
+```php
+Bot::sendAttachmentsToChat($chatId, $items, 'Подпись', [
+    'attachments' => [$keyboard],   // окажется на последнем сообщении
+]);
+```
+
+Сигнатуры:
+
+```php
+Bot::sendAttachmentsToChat($chatId, array $items, $caption = '', $extra = []);
+Bot::sendAttachmentsToUser($userId, array $items, $caption = '', $extra = []);
 ```
 
 ---
@@ -474,6 +577,11 @@ Bot::editMessage($messageId, [
 // Удалить сообщение
 Bot::deleteMessage($messageId);
 ```
+
+> ⚠️ Сообщение с вложением `file` не может содержать других вложений, кроме
+> `inline_keyboard` — см. [«Ограничения MAX на состав вложений»](#️-ограничения-max-на-состав-вложений).
+> `sendMessageToChat()`, `sendMessageToUser()` и `editMessage()` проверяют это
+> до обращения к API и бросают `MaxBotException`.
 
 ### Чаты
 
@@ -595,9 +703,16 @@ Bot::sendImageToChat($chatId, '/path/to/photo.jpg', 'Подпись');
 
 // Отправить видео пользователю
 Bot::sendVideoToUser($userId, '/path/to/video.mp4', 'Подпись');
+
+// Отправить пачку вложений (файлы уйдут отдельными сообщениями)
+Bot::sendAttachmentsToChat($chatId, [
+    ['type' => 'image', 'path' => '/path/to/photo.jpg'],
+    ['type' => 'file',  'path' => '/path/to/doc.pdf'],
+], 'Подпись');
 ```
 
 Полное описание — в разделе [«Отправка медиафайлов»](#отправка-медиафайлов).
+Ограничения на состав вложений — [«Ограничения MAX на состав вложений»](#️-ограничения-max-на-состав-вложений).
 
 ### Действия
 
@@ -735,6 +850,35 @@ try {
     echo "Error: " . $e->getMessage();
     print_r($e->getContext());
 }
+```
+
+### Ошибки внутри обработчиков
+
+Исключение, вылетевшее из обработчика, перехватывается фреймворком и передаётся в лог,
+а не в ответ HTTP: **тело ответа на webhook MAX отбрасывает**, поэтому ошибка, выведенная
+туда через `echo`, исчезла бы бесследно — со стороны это выглядит как «бот молча ничего
+не отправил».
+
+Поведение по режимам:
+
+| Режим | Что происходит с ошибкой обработчика |
+|-------|--------------------------------------|
+| Webhook | пишется в лог, вебхуку возвращается `200` (чтобы MAX не повторял заведомо падающий запрос) |
+| Long Polling | пишется в лог и в консоль; обработка остальных обновлений продолжается |
+
+По умолчанию сообщения уходят в `error_log()`. Свой обработчик:
+
+```php
+PHPMaxBot::$errorHandler = function ($message, $exception) {
+    file_put_contents('/var/log/maxbot.log', date('c') . ' ' . $message . "\n", FILE_APPEND);
+};
+```
+
+В строку лога попадают класс исключения, текст, а для `ApiException` — ещё и код ошибки
+MAX с HTTP-статусом и контекстом:
+
+```
+PHPMaxBot error [webhook] PHPMaxBot\Exceptions\ApiException: MAX API Error: ... (api_code=attachment.not.ready, http_code=400) context={"endpoint":"messages",...}
 ```
 
 ## Доступ к текущему обновлению

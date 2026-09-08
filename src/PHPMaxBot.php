@@ -76,6 +76,37 @@ class PHPMaxBot
     public static $curlOptions = [];
 
     /**
+     * Custom error logger, called as $errorHandler($message, $exception).
+     * When null, errors are written with error_log().
+     *
+     * Handler exceptions are never printed into the webhook HTTP response —
+     * MAX discards that body, so an error sent there would be lost silently.
+     *
+     * @var callable|null
+     */
+    public static $errorHandler = null;
+
+    /**
+     * How many times to re-send a message that the API rejected with
+     * "attachment.not.ready".
+     *
+     * MAX processes an uploaded file asynchronously: a message sent immediately
+     * after upload is rejected with HTTP 400 attachment.not.ready and never
+     * reaches the chat. Retrying a moment later succeeds. Set to 0 to disable.
+     *
+     * @var int
+     */
+    public static $attachmentRetries = 5;
+
+    /**
+     * Base delay between attachment retries, in milliseconds. The delay grows
+     * linearly (delay, 2*delay, 3*delay, ...) to give bigger files more time.
+     *
+     * @var int
+     */
+    public static $attachmentRetryDelay = 500;
+
+    /**
      * PHPMaxBot version
      *
      * @var string
@@ -257,6 +288,47 @@ class PHPMaxBot
     }
 
     /**
+     * Report an exception through $errorHandler, or error_log() by default.
+     *
+     * API failures carry the MAX error code and description, which are the only
+     * way to tell "Must be only one file attachment in message" apart from a
+     * network problem — so they are unpacked into the log line.
+     *
+     * @param Exception $e
+     * @param string    $context Short label describing where the error happened
+     * @return string The formatted message that was logged
+     */
+    public static function logError($e, $context = '')
+    {
+        $parts = ['PHPMaxBot error'];
+        if ($context !== '') {
+            $parts[] = '[' . $context . ']';
+        }
+        $parts[] = get_class($e) . ': ' . $e->getMessage();
+
+        if ($e instanceof \PHPMaxBot\Exceptions\ApiException) {
+            $parts[] = '(api_code=' . $e->getApiErrorCode() . ', http_code=' . $e->getCode() . ')';
+        }
+
+        if ($e instanceof \PHPMaxBot\Exceptions\MaxBotException) {
+            $context_data = $e->getContext();
+            if (!empty($context_data)) {
+                $parts[] = 'context=' . json_encode($context_data, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+            }
+        }
+
+        $message = implode(' ', $parts);
+
+        if (is_callable(self::$errorHandler)) {
+            call_user_func(self::$errorHandler, $message, $e);
+        } else {
+            error_log($message);
+        }
+
+        return $message;
+    }
+
+    /**
      * Start the bot (webhook or long polling based on environment)
      *
      * @param array $allowedUpdates Array of allowed update types
@@ -280,7 +352,10 @@ class PHPMaxBot
 
             return true;
         } catch (Exception $e) {
-            echo $e->getMessage() . "\n";
+            $message = self::logError($e, 'start');
+            if (php_sapi_name() == 'cli') {
+                echo $message . "\n";
+            }
             return false;
         }
     }
@@ -299,7 +374,17 @@ class PHPMaxBot
                 throw new Exception('Invalid JSON in webhook request');
             }
 
-            echo $this->process();
+            try {
+                echo $this->process();
+            } catch (Exception $e) {
+                // MAX discards the webhook response body, so an error echoed here
+                // would disappear without a trace — the handler would simply look
+                // as if it had sent nothing. Log it instead, and acknowledge the
+                // update with 200 so the platform does not retry a call that is
+                // going to fail the same way again.
+                self::logError($e, 'webhook');
+                http_response_code(200);
+            }
         } else {
             http_response_code(400);
             throw new Exception('Access not allowed!');
@@ -326,7 +411,18 @@ class PHPMaxBot
                 if (isset($response['updates']) && !empty($response['updates'])) {
                     foreach ($response['updates'] as $update) {
                         self::$currentUpdate = $update;
-                        $process = $this->process();
+
+                        // Isolate handler failures: one broken update must not
+                        // stop the remaining ones from being processed.
+                        try {
+                            $process = $this->process();
+                        } catch (Exception $e) {
+                            $updateType = isset($update['update_type']) ? $update['update_type'] : 'unknown';
+                            $process = self::logError($e, 'update:' . $updateType);
+                            if (!self::$debug) {
+                                echo $process . "\n";
+                            }
+                        }
 
                         if (self::$debug) {
                             $line = "\n--------------------\n";
@@ -349,7 +445,7 @@ class PHPMaxBot
                 // Delay 1 second
                 sleep(1);
             } catch (Exception $e) {
-                echo "Error in long poll loop: " . $e->getMessage() . "\n";
+                echo self::logError($e, 'long_poll') . "\n";
                 sleep(5); // Wait before retrying
             }
         }
