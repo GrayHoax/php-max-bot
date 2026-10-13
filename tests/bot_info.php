@@ -52,7 +52,8 @@ test('setMyCommands — установка команд бота', function () {
     ];
     $result = Bot::setMyCommands($commands);
     assert_array($result, 'ответ setMyCommands');
-    assert_key($result, 'user_id');
+    assert_key($result, 'commands');
+    assert_equals($commands, $result['commands'], 'установленные команды');
 });
 
 // ── deleteMyCommands ────────────────────────────────────────────────────────
@@ -60,7 +61,8 @@ test('setMyCommands — установка команд бота', function () {
 test('deleteMyCommands — удаление всех команд бота', function () {
     $result = Bot::deleteMyCommands();
     assert_array($result, 'ответ deleteMyCommands');
-    assert_key($result, 'user_id');
+    assert_key($result, 'commands');
+    assert_equals([], $result['commands'], 'список команд должен быть пустым');
 });
 
 test_summary();

@@ -162,6 +162,8 @@ class Bot
     /**
      * Edit bot information
      *
+     * @deprecated PATCH /me is no longer documented in the current MAX API.
+     *             Use setMyCommands() to manage bot commands.
      * @param array $data
      * @return array
      */
@@ -171,14 +173,14 @@ class Bot
     }
 
     /**
-     * Set bot commands
+     * Set bot commands via PATCH /me/commands. An empty array deletes all commands.
      *
      * @param array $commands
      * @return array
      */
     public static function setMyCommands($commands = [])
     {
-        return self::editMyInfo(['commands' => $commands]);
+        return self::request('PATCH', 'me/commands', ['commands' => $commands]);
     }
 
     /**
@@ -188,7 +190,7 @@ class Bot
      */
     public static function deleteMyCommands()
     {
-        return self::editMyInfo(['commands' => []]);
+        return self::setMyCommands([]);
     }
 
     /**

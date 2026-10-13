@@ -640,17 +640,15 @@ Bot::unpinMessage($chatId);
 
 ### Бот
 
+Метод `Bot::editMyInfo()` устарел: `PATCH /me` отсутствует в актуальной
+[спецификации API MAX](https://github.com/max-messenger/api-schema/blob/main/schema.yaml).
+Для управления командами используйте `Bot::setMyCommands()` и `Bot::deleteMyCommands()`.
+
 ```php
 // Получить информацию о боте
 Bot::getMyInfo();
 
-// Редактировать информацию о боте
-Bot::editMyInfo([
-    'name' => 'Новое имя',
-    'description' => 'Описание'
-]);
-
-// Установить команды бота
+// Установить команды бота (PATCH /me/commands, до 32 команд)
 Bot::setMyCommands([
     ['name' => 'start', 'description' => 'Запустить бота'],
     ['name' => 'help', 'description' => 'Помощь']
